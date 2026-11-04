@@ -59,6 +59,17 @@ reviewed experiments. Not a production load generator or independently certified
 
 ![Local checks](https://github.com/offroadguy/inference-lab/actions/workflows/test.yml/badge.svg)
 
+## Watch the demo
+
+[![Watch the 73-second Inference Lab walkthrough](docs/images/video-preview.jpg)](docs/video/inference-lab-demo.mp4)
+
+[Watch or download the captioned demo](docs/video/inference-lab-demo.mp4) ·
+[Walkthrough chapters and recording notes](docs/demo-video.md)
+
+Actual dashboard recording, edited for pacing, with on-screen captions and no narration.
+Shows configuration autofill, preflight, recorded GPU results and model readiness.
+No new paid GPU run was launched for this recording.
+
 ## Dashboard preview
 
 Development screenshots below show the JSON autofill editor and recorded model readiness.
