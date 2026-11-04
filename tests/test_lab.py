@@ -209,3 +209,20 @@ def test_recovered_request_not_replayed(store):
     assert rows[0]["status"] == "incomplete"
     assert rows[0]["output"] == "part"
     assert all(x["status"] == "success" for x in rows[1:])
+
+
+def test_dashboard_snapshots_across_refresh_threads(store):
+    from concurrent.futures import ThreadPoolExecutor
+    from inference_lab.store import read_snapshot
+
+    run = store.create(Plan())
+    store.request(run["id"], {"id": "first", "status": "success"})
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        snapshots = list(pool.map(read_snapshot, [store.root] * 6))
+    for runs, requests in snapshots:
+        assert runs[0]["id"] == run["id"]
+        assert requests[run["id"]][0]["status"] == "success"
+    store.request(run["id"], {"id": "second", "status": "running"})
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        _, requests = pool.submit(read_snapshot, store.root).result()
+    assert len(requests[run["id"]]) == 2

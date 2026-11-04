@@ -79,3 +79,14 @@ class Store:
             if r["status"] == "running":
                 r.update(status="incomplete", error="local_interruption", ended_at=time.time())
                 self.request(run_id, r)
+
+
+def read_snapshot(root=None):
+    """Read and close on the calling refresh thread; return no live SQLite objects."""
+    store = Store(root)
+    try:
+        store.db.execute("BEGIN")
+        runs = store.runs()
+        return runs, {run["id"]: store.requests(run["id"]) for run in runs}
+    finally:
+        store.db.close()

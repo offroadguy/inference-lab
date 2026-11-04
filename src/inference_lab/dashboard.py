@@ -3,24 +3,23 @@ import json
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-from inference_lab.store import Store
+from inference_lab.store import read_snapshot
 from inference_lab.report import summarize
 
 st.set_page_config(page_title="Inference Lab", page_icon="🔬", layout="wide")
 st.title("Inference Lab")
 st.caption("Local experiment notebook · approval in CLI · client measurements and server telemetry kept separate")
-store = Store()
 
 
 @st.fragment(run_every="3s")
 def render():
-    runs = store.runs()
+    runs, requests = read_snapshot()
     if not runs:
         st.info("Create a plan and run it with the CLI. See README for a free simulated demo.")
         return
     chosen = st.selectbox("Run", [r["id"] for r in runs])
-    run = store.get(chosen)
-    rows = store.requests(chosen)
+    run = next(r for r in runs if r["id"] == chosen)
+    rows = requests[chosen]
     summary = summarize(run, rows)
     if run["plan"]["provider"] == "simulated":
         st.warning("SIMULATED DATA — verifies software behavior, not GPU/model performance")
@@ -38,7 +37,7 @@ def render():
     if steady:
         st.plotly_chart(px.histogram(pd.DataFrame(steady), x="status", color="error", title="Request outcomes"))
     comparisons = [{"id": r["id"], "provider": r["plan"]["provider"], "rate": r["plan"]["rate"],
-                    **summarize(r, store.requests(r["id"]))} for r in runs]
+                    **summarize(r, requests[r["id"]])} for r in runs]
     st.plotly_chart(px.scatter(pd.DataFrame(comparisons), x="rate", y="successful_rps", color="provider",
                               hover_name="id", title="Achieved throughput versus offered load (check configuration)"))
     telemetry_rows = [{"at": t["at"], **t["values"]} for t in run["telemetry"] if t["values"]]
