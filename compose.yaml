@@ -1,0 +1,15 @@
+services:
+  dashboard:
+    build: .
+    ports: ["127.0.0.1:8501:8501"]
+    volumes: ["./data:/app/data"]
+  cli:
+    build: .
+    profiles: ["cli"]
+    entrypoint: ["inference-lab"]
+    env_file:
+      - path: .env
+        required: false
+    volumes: ["./data:/app/data"]
+    stdin_open: true
+    tty: true
