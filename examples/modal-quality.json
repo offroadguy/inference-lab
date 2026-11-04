@@ -3,7 +3,7 @@
   "workload": "quality",
   "pricing_checked": "2026-11-03",
   "hypothesis": "Establish a real L4 baseline; no performance claim yet",
-  "requests": 4,
+  "requests": 40,
   "rate": 1,
-  "max_tokens": 64
+  "max_tokens": 128
 }

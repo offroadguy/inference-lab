@@ -1,0 +1,17 @@
+{
+  "provider": "simulated",
+  "workload": "tokens",
+  "requests": 6,
+  "rate": 10,
+  "warmup_requests": 1,
+  "input_lengths": [
+    64,
+    128
+  ],
+  "output_lengths": [
+    8,
+    16
+  ],
+  "arrival": "poisson",
+  "max_spend_usd": 10
+}

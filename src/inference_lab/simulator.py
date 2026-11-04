@@ -21,6 +21,7 @@ async def metrics():
     return PlainTextResponse('simulated_fixture 1\n')
 
 
+@app.post('/v1/completions')
 @app.post('/v1/chat/completions')
 async def completion(request: Request):
     data = await request.json()
@@ -29,14 +30,18 @@ async def completion(request: Request):
         return JSONResponse({"error": "controlled simulated overload"}, status_code=503)
     if fault == "timeout":
         await asyncio.sleep(5)
+    is_completion = "prompt" in data
     words = ["Synthetic", " output", ":", " no", " GPU", " evidence", "."]
+
+    if is_completion:
+        words = [" token"] * data["max_tokens"]
 
     async def stream():
         for word in words[:data["max_tokens"]]:
-            await asyncio.sleep(0.015)
-            yield 'data: ' + json.dumps({"choices": [{"delta": {"content": word}}]}) + '\n\n'
+            await asyncio.sleep(0.002 if is_completion else 0.015)
+            yield 'data: ' + json.dumps({"choices": [{"text": word} if is_completion else {"delta": {"content": word}}]}) + '\n\n'
         yield 'data: ' + json.dumps({"choices": [], "usage": {
-            "prompt_tokens": len(data["messages"][0]["content"].split()),
+            "prompt_tokens": len(data["prompt"]) if is_completion else len(data["messages"][0]["content"].split()),
             "completion_tokens": min(len(words), data["max_tokens"]),
         }}) + '\n\n'
         yield 'data: [DONE]\n\n'

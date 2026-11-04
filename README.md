@@ -1,8 +1,25 @@
 # Inference Lab
 
-A local-first inference engineering lab: choose a pinned model profile, review and approve a spending plan, run streamed workloads on a remote Modal GPU, and inspect persistent results in a local Streamlit dashboard.
+A local-first inference engineering lab: choose one of four pinned model profiles, review and approve a spending plan, run streamed workloads on a remote Modal GPU, and inspect persistent results in a local Streamlit dashboard.
 
-**Status:** the local simulator, measurement pipeline, approval guardrails and recovery tests are verified. The Modal/vLLM adapter is implemented and checked against the installed SDK, but **has not been GPU-deployed or benchmarked**. No real performance, capacity, cost savings or model-quality claims are made. See [verified results](docs/engineering-report.md).
+**Status:** the local simulator, four pinned tokenizer pipelines, measurement logic, approval guardrails and recovery tests are verified. The Modal/vLLM adapter is implemented and checked against the installed SDK, but **has not been GPU-deployed or benchmarked**. No real performance, capacity, cost savings or model-quality claims are made. See [verified results](docs/engineering-report.md).
+
+## Multi-model evaluation
+
+**Four configured checkpoints:** Qwen2.5-Instruct 0.5B, 3B, 7B and 32B. All are below 100B; none is claimed GPU-validated yet. The dashboard now distinguishes profile configuration, tokenizer preparation and verified remote smoke runs.
+
+- Hashed token-length-controlled workloads, regular/Poisson arrivals and repeated load campaigns.
+- Aggregate campaign spending approval, resumable child runs and explicit capacity evidence gates.
+- Goodput, scheduling lag, confidence intervals and separate server/device telemetry.
+- A 40-case versioned quality suite plus custom JSONL evaluation sets.
+- Optional local upstream vLLM cross-check and resource-attributed billing reconciliation.
+
+See the [complete multi-model workflow and validation boundaries](docs/multi-model-evaluation.md).
+
+```sh
+uv run inference-lab models
+uv run inference-lab plan --profile qwen-3b --config examples/sweep-simulated.json
+```
 
 ## Run the free local demo
 
@@ -65,7 +82,7 @@ uv run inference-lab list
 
 **`deploy` leaves a billable sandbox running**, bounded by its configured lifetime. `resume` reconciles the named sandbox/ID and preserves recorded attempts; it never replays successful, failed or incomplete requests. If the sandbox has terminated, create a fresh plan. If remote creation was ambiguous, reconciliation must succeed before work can continue. Check the provider workspace if shutdown is unverified. A local process crash does not stop remote billing.
 
-The estimate uses one L4, two physical CPU cores, 16 GiB RAM, a 25% compute margin and a separate other-charge allowance. CPU/memory limits and a provider-enforced lifetime bound the resource envelope. It is **not an exact dollar billing cap**: image builds, network, taxes, fees, account rates and credits can differ. No persistent model volume or auto-restarting deployment is created. A sandbox remains billable while idle until terminated or timed out; idle time is included in the plan.
+The estimate uses the selected profile’s GPU count, CPU cores and RAM, a 25% compute margin and a separate other-charge allowance. CPU/memory limits and a provider-enforced lifetime bound the resource envelope. It is **not an exact dollar billing cap**: image builds, network, taxes, fees, account rates and credits can differ. No persistent model volume or auto-restarting deployment is created. A sandbox remains billable while idle until terminated or timed out; idle time is included in the plan.
 
 ## What is measured
 
@@ -75,7 +92,7 @@ The estimate uses one L4, two physical CPU cores, 16 GiB RAM, a 25% compute marg
 - Readiness/cold-start envelope, separate warm-up requests, periodic available vLLM queue/KV-cache metrics.
 - Whole-run resource-cost estimate, per-success and per-million-output-token estimates; provider billing is explicitly unknown.
 
-SSE chunks are not necessarily tokens. Individual inter-token gaps, isolated model-loading time, allocated GPU memory and GPU utilization are currently unavailable. The dashboard does not invent them. Raw JSONL preserves measurements; CSV contains request summaries. [Methodology](docs/methodology.md) explains limits and interpretation.
+SSE chunks are not necessarily tokens. Individual server token timestamps and isolated model-loading time remain unavailable. NVIDIA device samples and vLLM request-phase histograms are collected when exposed by a real approved run. The dashboard does not invent them. Raw JSONL preserves measurements; CSV contains request summaries. [Methodology](docs/methodology.md) explains limits and interpretation.
 
 ## Scope and architecture
 
@@ -90,7 +107,7 @@ flowchart LR
     DB --> Files[JSONL / JSON / CSV / Markdown]
 ```
 
-Initial supported profile: `Qwen/Qwen2.5-0.5B-Instruct` at a fixed Hugging Face commit, vLLM 0.11.0, one NVIDIA L4, FP16, no quantization, 4096-token context, maximum 32 active sequences. Unsupported combinations fail before provisioning. Local transitive dependencies are locked in `uv.lock`; the server uses a versioned upstream vLLM image (tag, not digest). More models, engines, providers and retrieval are intentionally deferred. Superlinked is not part of this implementation and is not assumed to host arbitrary LLMs.
+Supported profiles use Qwen2.5-Instruct 0.5B/3B/7B/32B at fixed Hugging Face commits, vLLM 0.11.0, FP16 and no quantization. L4 and A100 hardware envelopes are reviewed per profile; 32B uses two 80GB A100s with tensor parallelism. Unsupported combinations fail before provisioning. Local dependencies are locked in `uv.lock`; the server image is version-tagged. More families, arbitrary sub-100B models and Superlinked remain extensions requiring separate validation.
 
 ## Engineering and interview evidence
 

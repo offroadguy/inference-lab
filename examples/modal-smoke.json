@@ -1,0 +1,22 @@
+{
+  "provider": "modal",
+  "workload": "tokens",
+  "requests": 20,
+  "rate": 1,
+  "concurrency": 2,
+  "input_lengths": [
+    128
+  ],
+  "output_lengths": [
+    32
+  ],
+  "arrival": "regular",
+  "max_spend_usd": 1,
+  "loading_s": 420,
+  "warmup_s": 120,
+  "benchmark_s": 120,
+  "runtime_s": 900,
+  "warmup_requests": 2,
+  "pricing_checked": "2026-11-03",
+  "hypothesis": "Validate identity, exact token counts, telemetry and cleanup on one L4; not a capacity claim"
+}

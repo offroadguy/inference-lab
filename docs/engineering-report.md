@@ -1,5 +1,12 @@
 # Engineering report — 2026-11-03
 
+## Multi-model implementation update
+
+The initial implementation results below are historical. The current platform adds four pinned Qwen2.5 profiles (0.5B, 3B, 7B, 32B), token-controlled manifests, repeated aggregate-approved campaigns, a 40-case quality suite, confidence/goodput metrics, NVIDIA/Prometheus collection, an upstream vLLM cross-check runner, and billing-statement imports.
+
+Current verification: **39 tests passed**, including known-timeline measurement validation, profile/memory checks, manifest tamper detection, exact token lengths, campaign approval/resume/cleanup, server metric parsing, quality scoring and billing attribution. Each of the four real pinned tokenizers was downloaded and exercised through a simulated streaming run. An eight-run simulation-only campaign (four profiles × two repetitions) completed. No weights were served on GPUs; no real capacity, quality, device telemetry, invoice or upstream GPU result is claimed. See [current workflow](multi-model-evaluation.md) for commands and remaining empirical validation.
+
+
 ## Verified scope
 
 Implemented a local Python CLI, SQLite run/request journal, Streamlit dashboard, JSON/CSV/JSONL/Markdown exports, a bounded HTTP/SSE workload generator, explicit spending approval and a Modal GPU sandbox adapter. Versions are pinned in pyproject/uv.lock; model and tokenizer use a fixed Hugging Face revision.

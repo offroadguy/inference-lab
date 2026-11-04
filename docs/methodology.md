@@ -2,9 +2,9 @@
 
 ## Workloads and scheduling
 
-`chat` rotates short inference-engineering prompts. `summary` repeats a versioned, synthetic engineering passage into a longer document. `quality` uses four exact-match smoke-test items. Prompt characters and server-reported token counts are stored separately. Default generation is deterministic-temperature sampling (`temperature=0`, seed 42), bounded output, and a request-wide timeout. This does not guarantee bit-for-bit identical GPU results.
+`chat` rotates short inference-engineering prompts. `summary` repeats a versioned, synthetic engineering passage into a longer document. `quality` now uses the versioned 40-case exact/JSON regression suite. `tokens` controls input/output lengths with pinned tokenizers; see [multi-model evaluation](multi-model-evaluation.md). Prompt characters and server-reported token counts are stored separately. Default generation is deterministic-temperature sampling (`temperature=0`, seed 42), bounded output, and a request-wide timeout. This does not guarantee bit-for-bit identical GPU results.
 
-The client offers requests at regular intervals (not a Poisson process). Each scheduled arrival either starts immediately or is rejected at the client concurrency bound; there is no unbounded client queue. This exposes overload without hiding latency in a growing client queue. Client rejections are included in the error fraction and are distinct from server HTTP rejection. This workload is useful for reproducible experiments but is not a claim to replicate all production traffic. Local scheduling, SQLite writes and network latency can limit the load generator.
+The client supports regular intervals and seeded Poisson arrivals, recorded in the plan. Each scheduled arrival either starts immediately or is rejected at the client concurrency bound; there is no unbounded client queue. This exposes overload without hiding latency in a growing client queue. Client rejections are included in the error fraction and are distinct from server HTTP rejection. This workload is useful for reproducible experiments but is not a claim to replicate all production traffic. Local scheduling, SQLite writes and network latency can limit the load generator.
 
 Warm-up is stored separately and excluded from steady-state aggregates. Prefix caching is explicitly disabled in the baseline. Repeated prompts can benefit from cache reuse when testing the prefix-cache setting; document this rather than claiming general gains. Repetitions are separate runs. Record baseline ID, hypothesis and repetition in each JSON plan. Avoid simultaneously changing hardware, workload, output budget, concurrency and engine parameters.
 
@@ -16,7 +16,7 @@ End-to-end percentiles use linear interpolation over successful steady-state req
 
 Throughput is successful completions (or successful output tokens) divided by the sum of complete benchmark segment durations, including response drain. A crash with an unclosed segment makes throughput unavailable. Resume does not replay previously recorded attempts; incomplete requests remain incomplete. A resumed run is not interchangeable with a fresh continuous-load run.
 
-Queue/KV telemetry is sampled at stage boundaries and approximately every five seconds during load where `/metrics` exposes recognized vLLM metrics. Missing metrics remain unavailable. Current code does not collect device utilization or allocated memory; KV-cache occupancy is not either of those. Readiness time combines provisioning, image/model startup and network polling. No isolated model-loading duration is claimed.
+Queue/KV telemetry is sampled at stage boundaries and approximately every five seconds during load where `/metrics` exposes recognized vLLM metrics. Missing metrics remain unavailable. The Modal adapter now collects bounded NVIDIA device memory/utilization samples when available; KV-cache occupancy is a separate measurement. Readiness time combines provisioning, image/model startup and network polling. No isolated model-loading duration is claimed.
 
 ## Capacity, cost and quality
 
@@ -24,7 +24,7 @@ A single run meets its configured targets only if all requests were offered, ben
 
 For planning only, if a verified deployment sustains `r` successful requests/sec, a target `R` requests/sec at 30% headroom needs approximately `ceil(R/(0.7*r))` equivalent replicas. Multiply by hourly resource cost. This extrapolation assumes comparable workload and linear scaling; it omits network, routing, interference and discount effects. Do not extrapolate from the simulator.
 
-`compare` lists all changed configuration fields and flags multi-variable comparisons. It does not prove statistical significance. For changes affecting outputs, run the same four-item quality set before/after and review saved outputs. Exact matching is brittle and too small to establish broad model quality; it is a regression smoke test only.
+`compare` lists all changed configuration fields and flags multi-variable comparisons. It does not prove statistical significance. For changes affecting outputs, run the same versioned quality set before/after and review saved outputs. Exact matching is brittle and too small to establish broad model quality; it is a regression smoke test only.
 
 ## Failure evidence
 

@@ -8,9 +8,16 @@ version = "0.1.0"
 description = "A local-first, approval-gated GPU inference experiment lab"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-  "httpx==0.28.1", "modal==1.6.3", "streamlit==1.51.0",
-  "pandas==2.3.3", "plotly==6.4.0", "python-dotenv==1.2.1",
-  "fastapi==0.121.0", "uvicorn==0.38.0", "prometheus-client==0.23.1",
+  "httpx==0.28.1",
+  "modal==1.6.3",
+  "streamlit==1.51.0",
+  "pandas==2.3.3",
+  "plotly==6.4.0",
+  "python-dotenv==1.2.1",
+  "fastapi==0.121.0",
+  "uvicorn==0.38.0",
+  "prometheus-client==0.23.1",
+  "tokenizers==0.22.1",
 ]
 
 [project.scripts]

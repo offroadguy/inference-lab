@@ -3,6 +3,8 @@ from collections import Counter
 from datetime import datetime, timezone
 from html import escape
 import json
+import os
+from pathlib import Path
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -10,6 +12,8 @@ import streamlit as st
 
 from inference_lab.config import Plan
 from inference_lab.report import compare, summarize
+from inference_lab.models import PROFILES
+from inference_lab.reference import crosscheck
 from inference_lab.store import read_snapshot
 
 st.set_page_config(page_title="Inference Lab · Engineering Observatory", page_icon="◈", layout="wide")
@@ -78,7 +82,7 @@ def label(run):
         name = "Concurrency experiment"
     else:
         name = "Baseline experiment"
-    return f"{name} · {p['rate']:g} req/s · C{p['concurrency']} · {run['id'][:6]}"
+    return f"{p['model'].split('/')[-1]} · {name} · {p['rate']:g} req/s · {run['id'][:6]}"
 
 
 def chart(fig, height=300):
@@ -131,7 +135,9 @@ def render():
         st.code("uv run python -m inference_lab.demo", language="bash")
         return
     by_id = {r["id"]: r for r in runs}
-    chosen = st.selectbox("Inspect an experiment", list(by_id), format_func=lambda rid: label(by_id[rid]))
+    chosen = st.selectbox("Inspect an experiment", list(by_id),
+                          index=next((i for i, r in enumerate(runs) if r["status"] == "complete"), 0),
+                          format_func=lambda rid: label(by_id[rid]))
     run = by_id[chosen]
     p = run["plan"]
     rows = requests[chosen]
@@ -157,8 +163,9 @@ def render():
     cols[2].metric("ACHIEVED THROUGHPUT", number(summary["successful_rps"], " req/s"))
     cols[3].metric("P95 FIRST RESPONSE", ms(summary["ttft_p95_s"]), help="First nonempty content chunk, not server TTFT.")
     st.write("")
-    overview, comparison, reliability, evidence = st.tabs(
-        ["Performance", "Compare experiments", "Reliability & cost", "Evidence & methodology"])
+    overview, comparison, reliability, quality, models, campaigns, evidence = st.tabs(
+        ["Performance", "Compare experiments", "Reliability & cost", "Quality & validation",
+         "Models & readiness", "Campaigns", "Evidence & methodology"])
 
     with overview:
         left, right = st.columns([1.65, 1])
@@ -188,6 +195,22 @@ def render():
                 chart(fig)
             else:
                 panel("Awaiting requests", "The experiment has not recorded steady-state arrivals yet.")
+        st.subheader("Measurement confidence")
+        a, b, c = st.columns(3)
+        a.metric("LATENCY-QUALIFIED GOODPUT", number(summary["goodput_rps"], " req/s"))
+        b.metric("CLIENT SCHEDULE LAG · P95", ms(summary["schedule_lag_p95_s"]))
+        bounds = summary.get("error_rate_wilson_95")
+        c.metric("ERROR RATE · 95% UPPER BOUND", f"{bounds[1]:.1%}" if bounds else "Unavailable")
+        ci = summary.get("latency_p95_bootstrap_95_s")
+        if ci:
+            st.caption(f"p95 latency bootstrap interval: {ms(ci[0])}–{ms(ci[1])}. "
+                       "Conditional on observed requests; repeated runs assess temporal variation.")
+        with st.expander("Capacity evidence checks"):
+            if summary["capacity_exclusions"]:
+                for reason in summary["capacity_exclusions"]:
+                    st.markdown(f"- {reason}")
+            else:
+                st.success("This run meets the evidence checks. Use at least three repetitions for a campaign operating point.")
         st.subheader("The experiment")
         a, b, c = st.columns(3)
         with a:
@@ -303,7 +326,8 @@ def render():
         estimate = Plan(**p).estimate()
         a.metric("RESOURCE COST ESTIMATE", number(summary["resource_cost_estimate_usd"], " USD"))
         b.metric("PLANNED UPPER ESTIMATE", number(estimate["upper_usd"], " USD"))
-        c.metric("PROVIDER BILLING", "Not verified")
+        c.metric("IMPORTED BILLING STATEMENT", number(summary["provider_reported_cost_usd"], " USD"))
+        st.caption("Billing provenance: " + summary["billing_verification"].replace("_", " "))
         st.caption("Simulation costs $0 in cloud resources. Remote estimates exclude uncertain charges and are not billing caps.")
         with st.expander("Resource limits & spending assumptions"):
             st.json({"maximum_authorized_usd": p["max_spend_usd"], "runtime_seconds": p["runtime_s"], **estimate})
@@ -312,9 +336,97 @@ def render():
                           for t in run["telemetry"] if t["values"]]
         if telemetry_rows:
             st.line_chart(pd.DataFrame(telemetry_rows).set_index("at"))
-        else:
+        devices = [{"at": datetime.fromtimestamp(t["at"], timezone.utc),
+                    "Memory used (GiB)": t["gpu_memory_bytes"] / 2**30,
+                    "GPU utilization (%)": t["gpu_utilization"]}
+                   for t in run["telemetry"] if t.get("gpu_memory_bytes") is not None]
+        if devices:
+            device_frame = pd.DataFrame(devices).set_index("at")
+            st.caption("NVIDIA device observations: aggregate memory and mean device utilization; distinct units.")
+            st.line_chart(device_frame[["Memory used (GiB)"]])
+            st.line_chart(device_frame[["GPU utilization (%)"]])
+        if not devices and not telemetry_rows:
             panel("Device telemetry unavailable", "No server queue or KV-cache samples were exposed in this run. "
                   "GPU utilization and allocated memory are not inferred from client timing.")
+
+    with quality:
+        st.subheader("Quality is a separate axis.")
+        st.caption("Versioned task scoring accompanies performance. Synthetic fixture outputs are not model-quality evidence.")
+        a, b, c = st.columns(3)
+        a.metric("UNIQUE COMPLETED CASES", str(summary["quality_unique_cases"]))
+        coverage = summary.get("quality_coverage")
+        b.metric("EVALUATION COVERAGE", f"{coverage:.0%}" if coverage is not None else "Not evaluated")
+        c.metric("TOKEN LENGTHS", "Conformant" if summary["length_conformant"] is True else
+                 "Mismatched" if summary["length_conformant"] is False else "Not controlled")
+        if summary["quality_categories"]:
+            st.dataframe(pd.DataFrame([{"Category": name, **values}
+                for name, values in summary["quality_categories"].items()]), hide_index=True, width="stretch")
+        else:
+            panel("Run a dedicated quality workload", "The built-in suite covers arithmetic, structured extraction, "
+                  "code reasoning and grounded reading across 40 distinct cases. Custom JSONL suites are supported. "
+                  "This is regression coverage, not a general intelligence ranking.")
+        st.subheader("Upstream benchmark cross-check")
+        reference = run.get("reference", {})
+        if reference.get("metrics"):
+            check = crosscheck(summary, reference["metrics"])
+            st.dataframe(pd.DataFrame([{"Metric": name, **values} for name, values in check["metrics"].items()]),
+                         hide_index=True, width="stretch")
+            for limitation in check["limitations"]:
+                st.caption(limitation)
+        else:
+            panel("No upstream result attached", "Enable reference_s in a reviewed single-length, Poisson token plan "
+                  "to run vLLM's benchmark from a local Docker client within the same approved resource lifetime. "
+                  "Local unit tests alone do not establish measurement accuracy.")
+        server = summary["server_measurements"]
+        if server["histograms"]:
+            st.subheader("Server request-phase measurements")
+            st.dataframe(pd.DataFrame([{"Metric": name, **values} for name, values in server["histograms"].items()]),
+                         hide_index=True, width="stretch")
+            st.caption(server.get("scope", ""))
+
+    with models:
+        st.subheader("Four checkpoints. Explicit evidence levels.")
+        st.caption("Qwen2.5 0.5B / 3B / 7B / 32B. All below 100B; this is not a claim to support every model under 100B.")
+        inventory = []
+        for key, profile in PROFILES.items():
+            matching = [r for r in runs if r["plan"]["model"] == profile.model]
+            tokenizer_checked = any(r.get("manifest", {}).get("version") == "engineering-passages-v1"
+                                    for r in matching)
+            remote = [r for r in matching if r["plan"]["provider"] == "modal" and r["status"] == "complete"
+                      and r["shutdown"] == "verified" and r.get("server_identity", {}).get("verified")
+                      and summarize(r, requests[r["id"]])["successful"] > 0]
+            inventory.append({"Profile": key, "Parameters (B)": profile.parameters_b,
+                              "Hardware": f"{profile.gpu_count} × {profile.gpu}",
+                              "Pinned tokenizer prepared": tokenizer_checked,
+                              "Verified remote smoke runs": len(remote),
+                              "State": "Remote smoke passed" if remote else "GPU validation pending"})
+        st.dataframe(pd.DataFrame(inventory), hide_index=True, width="stretch")
+        st.caption("Readiness counts reflect the current evidence-source filter. Simulation never validates model execution.")
+        with st.expander("Analytical memory budgets and model revisions"):
+            st.json([profile.to_dict() for profile in PROFILES.values()])
+        panel("What larger-model support means", "Profiles specify pinned weights, FP16 serving, context limits, "
+              "tensor parallelism and resource budgets. The 32B profile uses two 80GB A100s. "
+              "Weights, activations and KV cache must fit together; parameter count alone is not a compatibility test.")
+
+    with campaigns:
+        st.subheader("Repeated load sweeps")
+        st.caption("Sequential experiments, aggregate spending approval, durable progress and explicit capacity checks.")
+        campaign_files = sorted(Path(os.getenv("LAB_DATA") or "data").glob("campaign-*-report.json"), reverse=True)
+        if campaign_files:
+            file = st.selectbox("Campaign report", campaign_files, format_func=lambda path: path.stem)
+            try:
+                report = json.loads(file.read_text())
+                st.dataframe(pd.DataFrame(report["points"]), hide_index=True, width="stretch")
+                st.json({"highest_tested_qualified_offered_rps": report["highest_tested_qualified_offered_rps"],
+                         "status": report["campaign"]["status"],
+                         "approved_maximum_usd": report["campaign"]["max_spend_usd"]})
+                for limitation in report["limitations"]:
+                    st.caption(limitation)
+            except (ValueError, KeyError, OSError):
+                st.warning("Campaign report is not readable yet; retry after the next export.")
+        else:
+            panel("No campaign results yet", "Use sweep-plan, sweep-approve and sweep-run in the CLI. "
+                  "A capacity point needs three qualifying remote repetitions; synthetic runs remain demonstrations.")
 
     with evidence:
         st.subheader("Trace every claim to a request.")

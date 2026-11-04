@@ -11,15 +11,23 @@ from .config import Plan
 from .providers import provider_for
 from .report import export, compare
 from .store import Store
+from .datasets import create_run, validate_manifest
+from .models import PROFILES, profile_config
 
 
 def require_approval(run, plan):
     plan.validate()
+    if run.get("manifest"):
+        validate_manifest(run["manifest"])
+    if plan.workload in {"tokens", "quality"} and not run.get("manifest"):
+        raise ValueError("This workload needs a prepared manifest; create a new plan")
     if plan.provider == "simulated":
         return
     a = run.get("approval")
     if not a or a["fingerprint"] != plan.fingerprint():
         raise ValueError("Missing approval or materially changed plan; create a fresh plan and approve")
+    if run.get("manifest") and a.get("manifest_sha256") != run["manifest"]["sha256"]:
+        raise ValueError("Prepared workload is not covered by this approval")
     if not run["deploy_intent"] and time.time() > a["expires_at"]:
         raise ValueError("Approval expired before deployment; approve again")
     if run.get("deadline") and time.time() >= run["deadline"] - 30:
@@ -45,6 +53,13 @@ def launch(store, run, command):
     if run["status"] == "complete":
         print(export(store, run))
         return
+    import platform
+    from importlib.metadata import version
+    run["environment"] = {"python": platform.python_version(), "system": platform.system(),
+                          "machine": platform.machine(), "httpx": version("httpx"),
+                          "modal": version("modal"), "server_image": plan.image}
+    from .reference import preflight
+    preflight(plan)
     provider = provider_for(plan)
     store.recover(run["id"])
     leave_running = False
@@ -63,7 +78,10 @@ def launch(store, run, command):
             return
         run["status"] = "running"
         store.save(run)
-        asyncio.run(execute(run, plan, store, provider.endpoint()))
+        asyncio.run(execute(run, plan, store, provider.endpoint(), provider))
+        if plan.reference_s and "reference" not in run["stages"]:
+            from .reference import run_reference
+            asyncio.run(run_reference(plan, run, store, provider.endpoint()))
         run["status"] = "complete"
     except (Exception, KeyboardInterrupt) as exc:
         run["status"] = "partial"
@@ -86,26 +104,62 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("plan")
     p.add_argument("--config", type=Path)
+    p.add_argument("--profile", choices=list(PROFILES))
     p.add_argument("--provider", choices=["simulated", "modal"])
-    p.add_argument("--workload", choices=["chat", "summary", "quality"])
+    p.add_argument("--workload", choices=["chat", "summary", "quality", "tokens"])
     for cmd in ["approve", "deploy", "run", "benchmark", "resume", "teardown", "report"]:
         sub.add_parser(cmd).add_argument("run_id")
     sub.add_parser("list")
+    sub.add_parser("models")
     p = sub.add_parser("compare")
     p.add_argument("baseline", type=Path)
     p.add_argument("candidate", type=Path)
+    p = sub.add_parser("sweep-plan")
+    p.add_argument("--profiles", default="qwen-0.5b,qwen-3b,qwen-7b,qwen-32b")
+    p.add_argument("--rates", default="1,2,4")
+    p.add_argument("--repetitions", type=int, default=3)
+    p.add_argument("--config", type=Path, required=True)
+    p.add_argument("--max-spend-usd", type=float, required=True)
+    for cmd in ("sweep-approve", "sweep-run", "sweep-report"):
+        sub.add_parser(cmd).add_argument("campaign_id")
+    p = sub.add_parser("reconcile-cost")
+    p.add_argument("run_id")
+    p.add_argument("statement", type=Path)
     args = parser.parse_args()
     store = Store(args.data)
     try:
-        if args.command == "plan":
-            cfg = json.loads(args.config.read_text()) if args.config else {}
+        if args.command == "sweep-plan":
+            from .campaigns import create
+            campaign = create(store, args.profiles.split(","), [float(x) for x in args.rates.split(",")],
+                              args.repetitions, json.loads(args.config.read_text()), args.max_spend_usd)
+            print(json.dumps(campaign, indent=2))
+        elif args.command in {"sweep-approve", "sweep-run", "sweep-report"}:
+            from .campaigns import load, approve, execute_campaign, write_report
+            with store.lock(args.campaign_id):
+                campaign = load(store, args.campaign_id)
+                if args.command == "sweep-approve":
+                    print(json.dumps({"campaign": campaign, "plans": [
+                        {"run_id": rid, "plan": store.get(rid)["plan"],
+                         "estimate": Plan(**store.get(rid)["plan"]).estimate()}
+                        for rid in campaign["run_ids"]]}, indent=2))
+                    phrase = f"APPROVE SWEEP {campaign['id']} USD {campaign['max_spend_usd']:.2f}"
+                    approve(store, campaign, input(f"Type exactly: {phrase}\n> "))
+                elif args.command == "sweep-run":
+                    execute_campaign(store, campaign)
+                else:
+                    print(json.dumps(write_report(store, campaign), indent=2))
+        elif args.command == "plan":
+            cfg = profile_config(args.profile) if args.profile else {}
+            cfg.update(json.loads(args.config.read_text()) if args.config else {})
             for key in ("provider", "workload"):
                 if getattr(args, key):
                     cfg[key] = getattr(args, key)
             plan = Plan(**cfg)
             plan.validate()
-            run = store.create(plan)
+            run = create_run(store, plan)
             print(json.dumps({"run_id": run["id"], "plan": plan.to_dict(), "estimate": plan.estimate()}, indent=2))
+        elif args.command == "models":
+            print(json.dumps([p.to_dict() for p in PROFILES.values()], indent=2))
         elif args.command == "list":
             print(json.dumps([{k: r.get(k) for k in ("id", "status", "shutdown")} for r in store.runs()], indent=2))
         elif args.command == "compare":
@@ -115,7 +169,11 @@ def main():
             with store.lock(args.run_id):
                 run = store.get(args.run_id)
                 plan = Plan(**run["plan"])
-                if args.command == "approve":
+                if args.command == "reconcile-cost":
+                    from .billing import reconcile
+                    print(json.dumps(reconcile(store, run, args.statement), indent=2))
+                    print(export(store, run))
+                elif args.command == "approve":
                     plan.validate()
                     print(json.dumps({"plan": plan.to_dict(), "estimate": plan.estimate()}, indent=2))
                     if run["deploy_intent"] or run["resource_id"]:
@@ -125,7 +183,7 @@ def main():
                         raise ValueError("Spending not approved")
                     run["approval"] = {"fingerprint": plan.fingerprint(), "approved_at": time.time(),
                                        "expires_at": time.time() + 3600, "max_spend_usd": plan.max_spend_usd,
-                                       "runtime_s": plan.runtime_s}
+                                       "runtime_s": plan.runtime_s, "manifest_sha256": run.get("manifest", {}).get("sha256")}
                     store.save(run)
                     print("Approved exact plan for one deployment; approval expires in one hour.")
                 elif args.command == "teardown":

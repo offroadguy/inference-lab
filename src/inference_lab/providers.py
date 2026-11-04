@@ -53,15 +53,24 @@ class ModalProvider:
         image = modal.Image.from_registry(plan.image).entrypoint([])
         args = ["vllm", "serve", plan.model, "--revision", plan.revision,
                 "--tokenizer-revision", plan.revision, "--host", "0.0.0.0", "--port", "8000",
-                "--dtype", plan.dtype, "--max-model-len", "4096", "--max-num-seqs", "32",
+                "--dtype", plan.dtype, "--max-model-len", str(plan.max_model_len), "--max-num-seqs", str(plan.server_max_sequences),
+                "--tensor-parallel-size", str(plan.gpu_count),
                 "--gpu-memory-utilization", "0.80", "--seed", str(plan.seed), "--enforce-eager",
                 "--enable-prefix-caching" if plan.prefix_caching else "--no-enable-prefix-caching"]
         self.sb = modal.Sandbox.create(
-            *args, app=app, name="run-" + run["id"], image=image, gpu="L4",
-            cpu=(2.0, 2.0), memory=(16384, 16384), timeout=plan.runtime_s,
+            *args, app=app, name="run-" + run["id"], image=image, gpu=f"{plan.gpu}:{plan.gpu_count}",
+            cpu=(plan.cpu_cores, plan.cpu_cores), memory=(plan.ram_gib * 1024, plan.ram_gib * 1024), timeout=plan.runtime_s,
         )
         run["resource_id"] = self.sb.object_id
         store.save(run)
+
+    async def gpu_telemetry(self):
+        from .telemetry import parse_gpu_csv
+        process = await self.sb.exec.aio(
+            "nvidia-smi", "--query-gpu=index,name,driver_version,memory.used,memory.total,utilization.gpu",
+            "--format=csv,noheader,nounits", timeout=5)
+        text = await process.stdout.read.aio()
+        return parse_gpu_csv(text)
 
     def endpoint(self):
         creds = self.sb.create_connect_token(port=8000)

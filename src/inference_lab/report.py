@@ -1,6 +1,8 @@
 import csv
 import json
 import math
+from .statistics import bootstrap_interval, wilson
+from .telemetry import histogram_deltas
 
 
 def percentile(values, q):
@@ -31,7 +33,68 @@ def summarize(run, records):
     err = (len(rows) - len(ok)) / len(rows) if rows else None
     p95 = percentile(latency, .95)
     quality = [r["quality_pass"] for r in ok if r.get("quality_pass") is not None]
+    good = [r for r in ok if r.get("latency_s", float("inf")) <= plan.target_p95_s
+            and r.get("ttft_s") is not None and r["ttft_s"] <= plan.target_ttft_s
+            and (r.get("output_tokens") == 1 or (r.get("tpot_s") is not None and r["tpot_s"] <= plan.target_tpot_s))
+            and r.get("length_conformant") is not False]
+    errors = len(rows) - len(ok)
+    error_interval = wilson(errors, len(rows))
+    lags = [r["schedule_lag_s"] for r in rows if r.get("schedule_lag_s") is not None]
+    lag_p95 = percentile(lags, .95)
+    categories = {}
+    for record in rows:
+        if record.get("quality_category"):
+            categories.setdefault(record["quality_category"], {}).setdefault(record.get("case_id"), []).append(
+                bool(record.get("quality_pass")))
+    category_scores = {category: {"unique_cases": len(cases),
+                                 "case_mean_accuracy": sum(sum(v)/len(v) for v in cases.values())/len(cases)}
+                       for category, cases in categories.items()}
+    controlled = plan.workload == "tokens"
+    conformity = all(r.get("length_conformant") is True for r in ok) if controlled and ok else None
+    quality_cases = {r.get("case_id") for r in ok if r.get("quality_category")}
+    expected_cases = {r["id"] for r in run.get("manifest", {}).get("records", []) if r.get("quality_case")}
+    reasons = []
+    if plan.provider != "modal":
+        reasons.append("simulated evidence")
+    if run.get("status") != "complete" or run.get("shutdown") != "verified":
+        reasons.append("run or cleanup incomplete")
+    if not run.get("server_identity", {}).get("verified"):
+        reasons.append("remote server identity not verified")
+    if len(ok) < plan.min_capacity_samples:
+        reasons.append("insufficient successful samples")
+    if duration < 60 or not complete_window:
+        reasons.append("less than 60s of complete steady-state observation")
+    if not controlled or not conformity:
+        reasons.append("token-length control absent or mismatched")
+    if p95 is None or p95 > plan.target_p95_s:
+        reasons.append("latency target not met")
+    if error_interval is None or error_interval[1] > plan.target_error_rate:
+        reasons.append("error-rate upper bound exceeds target")
+    if lag_p95 is None or lag_p95 > max(.01, .1/plan.rate):
+        reasons.append("client scheduling lag too high or unknown")
+    if len(run["segments"]) != 1:
+        reasons.append("resumed or absent observation window")
+    if len(rows) != plan.requests:
+        reasons.append("not all requests offered")
+    billing = run.get("billing", {})
+    actual_cost = billing.get("total_usd")
     return {
+        "goodput_rps": len(good)/duration if duration and complete_window else None,
+        "good_requests": len(good), "error_rate_wilson_95": error_interval,
+        "latency_p95_bootstrap_95_s": run.get("analysis", {}).get("latency_p95_bootstrap_95_s"),
+        "schedule_lag_p95_s": lag_p95,
+        "client_persistence_total_s": sum(r.get("persistence_s", 0) for r in rows),
+        "length_conformant": conformity,
+        "input_token_distribution": sorted({r["prompt_tokens"] for r in ok if r.get("prompt_tokens") is not None}),
+        "output_token_distribution": sorted({r["output_tokens"] for r in ok if r.get("output_tokens") is not None}),
+        "capacity_evidence_eligible": not reasons, "capacity_exclusions": reasons,
+        "quality_categories": category_scores, "quality_unique_cases": len(quality_cases),
+        "quality_coverage": len(quality_cases)/len(expected_cases) if expected_cases else None,
+        "server_measurements": histogram_deltas(run.get("telemetry", [])),
+        "billing_verification": billing.get("verification", "unavailable"),
+        "reconciled_cost_per_success_usd": actual_cost/len(ok) if actual_cost is not None and ok else None,
+        "reconciled_cost_per_million_tokens_usd": actual_cost/tokens*1e6 if actual_cost is not None and tokens else None,
+        "reference_status": run.get("reference", {}).get("status", "not_run"),
         "evidence": "SIMULATED — not GPU evidence" if plan.provider == "simulated" else "remote_client_measurements",
         "offered": len(rows), "successful": len(ok), "planned": plan.requests,
         "unattempted": plan.requests - len(rows), "error_rate_including_client_rejections": err,
@@ -45,7 +108,7 @@ def summarize(run, records):
         "offered_rate_target": plan.rate, "output_tokens": tokens,
         "within_targets": bool(p95 is not None and p95 <= plan.target_p95_s and err <= plan.target_error_rate
                                and len(rows) == plan.requests and complete_window and "benchmark" in run["stages"]),
-        "resource_cost_estimate_usd": cost, "provider_reported_cost_usd": None,
+        "resource_cost_estimate_usd": cost, "provider_reported_cost_usd": actual_cost,
         "cost_per_success_estimate_usd": cost / len(ok) if ok and cost is not None else None,
         "cost_per_million_output_tokens_estimate_usd": cost / tokens * 1e6 if tokens and cost is not None else None,
         "quality_exact_match": sum(quality) / len(quality) if quality else None,
@@ -57,19 +120,27 @@ def summarize(run, records):
                        "Capacity applies only to this workload, network path, load and bounded client.",
                        "Cost is whole-run resource time, excludes non-compute charges; billing remains unknown.",
                        "Readiness includes provisioning and loading; model-only loading is unavailable.",
-                       "GPU utilization and allocated memory unavailable; KV occupancy is a different metric.",
-                       "Versioned four-item quality set is an exact-match smoke test, not a quality benchmark."],
+                       "Device utilization/memory come only from NVIDIA samples; absent samples remain unavailable.",
+                       "Quality suite is a versioned task regression set, not a broad model-capability benchmark.",
+                       "Bootstrap intervals assume independent request samples; use repeated runs for temporal variation."],
     }
 
 
 def export(store, run):
     rows = store.requests(run["id"])
+    latency = [r["latency_s"] for r in rows if r["phase"] == "steady" and r["status"] == "success"]
+    run["analysis"] = {"latency_p95_bootstrap_95_s": bootstrap_interval(latency)}
+    store.save(run)
     summary = summarize(run, rows)
+    if run.get("reference", {}).get("metrics"):
+        from .reference import crosscheck
+        summary["reference_crosscheck"] = crosscheck(summary, run["reference"]["metrics"])
     folder = store.root / run["id"]
     folder.mkdir(exist_ok=True)
     payload = {"run": run, "summary": summary, "requests": rows, "events": store.events(run["id"])}
     (folder / "report.json").write_text(json.dumps(payload, indent=2))
-    fields = ["id", "phase", "status", "error", "prompt_chars", "output_chars", "prompt_tokens", "output_tokens",
+    fields = ["id", "phase", "status", "error", "case_id", "quality_category", "input_tokens_target",
+              "output_tokens_target", "length_conformant", "schedule_lag_s", "prompt_chars", "output_chars", "prompt_tokens", "output_tokens",
               "ttft_s", "tpot_s", "latency_s", "quality_pass"]
     with (folder / "requests.csv").open("w") as f:
         writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
@@ -90,9 +161,11 @@ def export(store, run):
 
 
 def compare(a, b):
+    from .config import Plan
+    pa, pb = Plan(**a["run"]["plan"]).to_dict(), Plan(**b["run"]["plan"]).to_dict()
     allowed = {"hypothesis", "baseline_id", "repetition"}
-    changes = {k: (a["run"]["plan"][k], b["run"]["plan"][k]) for k in a["run"]["plan"]
-               if a["run"]["plan"][k] != b["run"]["plan"][k] and k not in allowed}
+    changes = {k: (pa[k], pb[k]) for k in pa
+               if pa[k] != pb[k] and k not in allowed}
     return {"controlled_changes": changes, "single_variable": len(changes) == 1,
             "baseline": a["summary"], "candidate": b["summary"],
             "warning": "No improvement claim without repetitions, comparable environment and quality review."}

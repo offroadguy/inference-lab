@@ -1,0 +1,22 @@
+{
+  "provider": "modal",
+  "workload": "tokens",
+  "requests": 200,
+  "rate": 2,
+  "warmup_requests": 5,
+  "input_lengths": [
+    128
+  ],
+  "output_lengths": [
+    64
+  ],
+  "arrival": "poisson",
+  "max_spend_usd": 10,
+  "loading_s": 900,
+  "warmup_s": 120,
+  "benchmark_s": 240,
+  "runtime_s": 1800,
+  "pricing_checked": "2026-11-03",
+  "min_capacity_samples": 200,
+  "reference_s": 240
+}
