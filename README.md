@@ -1,6 +1,29 @@
 # Inference Lab
 
-A local-first inference experiment harness: onboard a supported Hugging Face model, pin its configuration and workload, review a spending plan, and compare recorded latency, throughput, quality and resource evidence.
+**Bring a model. Ask a performance question. Run an experiment you can explain.**
+
+Want to explore inference benchmarking without owning a GPU—or spending your first afternoon wiring together scripts, charts and cloud cleanup? Start with a **free local simulator**, then take a reviewed configuration to **real GPUs on Modal**. Keep the configuration, measurements and evidence together in one local workspace.
+
+| Model source | GPU compute | Built-in model family |
+|:---:|:---:|:---:|
+| <a href="https://huggingface.co/"><img src="src/inference_lab/assets/huggingface.svg" alt="Hugging Face logo" height="40"></a> | <a href="https://modal.com/"><img src="src/inference_lab/assets/modal.svg" alt="Modal logo" height="32"></a> | <a href="https://huggingface.co/Qwen"><img src="src/inference_lab/assets/qwen.jpeg" alt="Qwen logo" height="40"></a> |
+| **Hugging Face** | **Modal** | **Qwen** |
+
+Serving engine: **vLLM** · Dashboard: **Streamlit + Plotly** · Experiment journal: **SQLite**
+
+## What can I do with this?
+
+- **Try the workflow for $0 in cloud spend.** Generate simulated successes, failures and comparisons on your laptop. No GPU or cloud account required.
+- **Bring a supported Hugging Face model.** Resolve a pinned revision and check metadata and the analytical memory budget before attempting GPU execution.
+- **Turn a question into a configuration.** Use smoke/load autofill or edit JSON to explore request rate, concurrency, token lengths, precision and cache settings.
+- **Run a small, deliberate GPU experiment.** Review estimated cost, approve the exact plan and use a bounded resource lifetime with recorded cleanup.
+- **See what happened—and what remains unproven.** Inspect latency, throughput, failures, available telemetry and quality-workload scores; export the evidence for review.
+
+**Start small, measure, then decide what to test next.** One development smoke run completed 60 requests on an A100 40GB with an estimated resource cost of **about $0.09**. That is [one observed experiment](docs/smoke-result-2026-11-03.json), not a price guarantee or reconciled invoice. Model size, startup time, workload and hardware change the cost.
+
+[**Try the free demo ↓**](#run-the-free-local-demo) · [**Bring your model →**](docs/bring-your-model.md) · [**See the dashboard ↓**](#dashboard-preview)
+
+Local execution currently means **simulation**, not local GPU model serving. **Modal is the implemented cloud provider**; Superlinked is not integrated. Logos identify project components, not partnerships or endorsements.
 
 ## Why I built this
 
