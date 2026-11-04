@@ -11,6 +11,16 @@ Want to explore inference benchmarking without owning a GPU—or spending your f
 
 Serving engine: **vLLM** · Dashboard: **Streamlit + Plotly** · Experiment journal: **SQLite**
 
+## Built for curious engineers—and the people leading them
+
+**Engineering manager, inference engineer, or hands-on hobbyist? Start here.** Inference Lab gives you a working place to explore model serving, try configurations and inspect results without building the experiment harness from scratch.
+
+- **Engineering managers:** walk through an experiment with your team and see the settings, results and limits behind a performance claim.
+- **Inference engineers:** test a hypothesis, compare configurations and inspect request-level evidence.
+- **Hobbyists and learners:** start with the free simulator, learn what the metrics mean, then try a small GPU run when you're ready.
+
+**Get started quickly. Keep your first experiment small. Learn before you scale.** The local demo has no cloud cost; real GPU runs use reviewed spending estimates and bounded lifetimes. Setup time and cost depend on your environment and chosen model.
+
 ## What can I do with this?
 
 - **Try the workflow for $0 in cloud spend.** Generate simulated successes, failures and comparisons on your laptop. No GPU or cloud account required.
