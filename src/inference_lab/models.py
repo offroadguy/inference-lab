@@ -1,5 +1,5 @@
 """Reviewed model profiles, not claims of successful GPU validation."""
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, replace
 
 
 @dataclass(frozen=True)
@@ -43,14 +43,23 @@ PROFILES = {
 }
 
 
-def profile_for(model):
-    for profile in PROFILES.values():
-        if profile.model == model:
+# Explicit alternatives preserve the four-model registry and pinned model revisions.
+ALTERNATE_PROFILES = {
+    key + "-a100": replace(PROFILES[key], key=key + "-a100", gpu="A100-40GB",
+                           gpu_gib=40, gpu_usd_s=.000583)
+    for key in ("qwen-0.5b", "qwen-3b")
+}
+ALL_PROFILES = {**PROFILES, **ALTERNATE_PROFILES}
+
+
+def profile_for(model, gpu=None):
+    for profile in ALL_PROFILES.values():
+        if profile.model == model and (gpu is None or profile.gpu == gpu):
             return profile
     raise ValueError("Unknown model; select a reviewed profile with the models command")
 
 
 def profile_config(key):
-    p = PROFILES[key]
+    p = ALL_PROFILES[key]
     return {"model": p.model, "revision": p.revision, "gpu": p.gpu, "gpu_count": p.gpu_count,
             "cpu_cores": p.cpu_cores, "ram_gib": p.ram_gib, "gpu_usd_s": p.gpu_usd_s}

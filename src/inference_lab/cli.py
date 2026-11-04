@@ -12,7 +12,7 @@ from .providers import provider_for
 from .report import export, compare
 from .store import Store
 from .datasets import create_run, validate_manifest
-from .models import PROFILES, profile_config
+from .models import ALL_PROFILES, profile_config
 
 
 def require_approval(run, plan):
@@ -104,7 +104,7 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("plan")
     p.add_argument("--config", type=Path)
-    p.add_argument("--profile", choices=list(PROFILES))
+    p.add_argument("--profile", choices=list(ALL_PROFILES))
     p.add_argument("--provider", choices=["simulated", "modal"])
     p.add_argument("--workload", choices=["chat", "summary", "quality", "tokens"])
     for cmd in ["approve", "deploy", "run", "benchmark", "resume", "teardown", "report"]:
@@ -159,7 +159,7 @@ def main():
             run = create_run(store, plan)
             print(json.dumps({"run_id": run["id"], "plan": plan.to_dict(), "estimate": plan.estimate()}, indent=2))
         elif args.command == "models":
-            print(json.dumps([p.to_dict() for p in PROFILES.values()], indent=2))
+            print(json.dumps([p.to_dict() for p in ALL_PROFILES.values()], indent=2))
         elif args.command == "list":
             print(json.dumps([{k: r.get(k) for k in ("id", "status", "shutdown")} for r in store.runs()], indent=2))
         elif args.command == "compare":

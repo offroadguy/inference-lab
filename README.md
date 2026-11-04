@@ -117,3 +117,7 @@ Supported profiles use Qwen2.5-Instruct 0.5B/3B/7B/32B at fixed Hugging Face com
 - [Verified engineering report, limitations and attribution](docs/engineering-report.md)
 
 The implementation was authored with OpenAI Codex assistance for Venkata Ganji. Modal supplies remote compute/lifecycle, vLLM supplies inference, and the Qwen team supplies the model. Personal understanding, operation and real benchmark results must be demonstrated separately. No employer source, internal project material or credentials are included.
+
+### Explicit alternate hardware
+
+`qwen-0.5b-a100` and `qwen-3b-a100` select one A100-40GB instead of L4, preserving model and tokenizer revisions, FP16, CPU and RAM limits. Use `plan --profile` to select them explicitly. Hardware changes produce a new plan fingerprint and require fresh approval; there is no automatic GPU substitution. Dashboard readiness lists the hardware actually validated, separately from the default profile. Timing comparisons across GPU types are not controlled model-only comparisons.

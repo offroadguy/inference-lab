@@ -140,7 +140,8 @@ def registry(runs, requests):
         passed = [r for r in matching if verified(r, requests)]
         attempted = [r for r in matching if r.get("deploy_intent") or r["status"] != "planned"]
         entries.append({"Profile": key, "Parameters (B)": profile.parameters_b,
-                        "Hardware": f"{profile.gpu_count} × {profile.gpu}",
+                        "Default hardware": f"{profile.gpu_count} × {profile.gpu}",
+                        "Validated hardware": ", ".join(sorted({f"{r['plan']['gpu_count']} × {r['plan']['gpu']}" for r in passed})) or "None",
                         "Readiness": "Smoke validated" if passed else "Attempted · not validated" if attempted else "Not launched",
                         "Validated runs": len(passed)})
     return entries
@@ -154,7 +155,7 @@ def workspace_overview(runs, requests):
     for entry in entries:
         color = "#087f6b" if entry["Validated runs"] else "#a86b16" if "Attempted" in entry["Readiness"] else "#64748b"
         cards.append(f'<div class="signal" style="--signal:{color}"><div class="name">{escape(entry["Profile"])}</div>'
-                     f'<div class="value">{escape(entry["Readiness"])}</div><div class="caption">{escape(entry["Hardware"])}</div></div>')
+                     f'<div class="value">{escape(entry["Readiness"])}</div><div class="caption">{escape(entry["Validated hardware"] if entry["Validated runs"] else entry["Default hardware"])}</div></div>')
     st.html('<div class="readiness">' + ''.join(cards) + '</div>')
     completed = [r for r in remote if verified(r, requests)]
     if completed:

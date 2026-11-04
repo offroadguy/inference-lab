@@ -64,7 +64,7 @@ class Plan:
     def validate(self):
         if type(self.prefix_caching) is not bool:
             raise ValueError("prefix_caching must be a boolean")
-        profile = profile_for(self.model)
+        profile = profile_for(self.model, self.gpu)
         if (self.revision, self.image, self.gpu, self.gpu_count, self.dtype, self.quantization,
             self.cpu_cores, self.ram_gib) != (
             profile.revision, IMAGE, profile.gpu, profile.gpu_count, "half", "none",
