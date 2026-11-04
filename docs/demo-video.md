@@ -1,6 +1,7 @@
 # Inference Lab demo video
 
-[Watch/download the MP4](video/inference-lab-demo.mp4).
+[Watch on YouTube](https://youtu.be/eu_YeSP6nyQ) ·
+[Download the MP4](video/inference-lab-demo.mp4).
 
 A 73-second captioned walkthrough recorded from the actual local Streamlit app.
 The footage is trimmed and reordered for clarity; it is not an animation or a live

@@ -61,9 +61,10 @@ reviewed experiments. Not a production load generator or independently certified
 
 ## Watch the demo
 
-[![Watch the 73-second Inference Lab walkthrough](docs/images/video-preview.jpg)](docs/video/inference-lab-demo.mp4)
+[![Watch the 73-second Inference Lab walkthrough](docs/images/video-preview.jpg)](https://youtu.be/eu_YeSP6nyQ)
 
-[Watch or download the captioned demo](docs/video/inference-lab-demo.mp4) ·
+[Watch on YouTube](https://youtu.be/eu_YeSP6nyQ) ·
+[Download the captioned MP4](docs/video/inference-lab-demo.mp4) ·
 [Walkthrough chapters and recording notes](docs/demo-video.md)
 
 Actual dashboard recording, edited for pacing, with on-screen captions and no narration.
