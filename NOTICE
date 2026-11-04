@@ -1,0 +1,7 @@
+Inference Lab
+Copyright 2026 Venkata Ganji
+
+Project source and documentation are licensed under Apache-2.0.
+Third-party dependencies, model weights, tokenizers, and brand assets retain
+their respective licenses and trademark rights. See src/inference_lab/assets/README.md
+for brand asset attribution. No affiliation or endorsement is implied.

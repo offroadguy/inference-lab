@@ -7,7 +7,7 @@
 3. **1:30–2:30** — Run `uv run python -m inference_lab.demo` or open `examples/simulated-demo.json` as the saved-results fallback. Show raw streaming samples, latency distributions and errors in the dashboard.
 4. **2:30–3:30** — Compare the synthetic concurrency experiment. Show what changed and distinguish software behavior from GPU optimization evidence.
 5. **3:30–4:30** — Inspect the controlled 503 experiment and subsequent healthy run. Explain durable requests, named resource reconciliation, partial results and unverified shutdown.
-6. **4:30–5:00** — State limitations and the next paid validation step. No real GPU capacity or cost savings have been measured yet.
+6. **4:30–5:00** — State limitations and the next paid validation step. Real serving smoke tests have passed; sustained capacity and cost savings have not been established. See the current engineering report.
 
 ## 1. Performance improvement protocol — real run pending
 

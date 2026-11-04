@@ -4,28 +4,34 @@ A local-first inference experiment harness: onboard a supported Hugging Face mod
 
 **Evidence status:** Qwen2.5 0.5B, 3B, 7B and 32B each completed a 60-request remote smoke test during development. This establishes serving compatibility for those tested configurations, not maximum capacity or model quality. Raw local run journals are not bundled in the public repository. A fresh clone starts empty; the free simulator generates clearly labeled synthetic results. New Hugging Face onboarding is metadata- and locally tested, not yet GPU-validated for a new model family.
 
-See [the reproducible onboarding and experiment workflow](docs/bring-your-model.md).
+**Status: experimental public preview.** Suitable for trying the local demo and bounded,
+reviewed experiments. Not a production load generator or independently certified benchmark.
 
-## Multi-model evaluation
+[Getting started & troubleshooting](docs/getting-started.md) ·
+[Bring your model](docs/bring-your-model.md) ·
+[Validation report](docs/engineering-report.md) ·
+[Contributing](CONTRIBUTING.md) · [Apache-2.0](LICENSE)
 
-**Four configured checkpoints:** Qwen2.5-Instruct 0.5B, 3B, 7B and 32B. All are below 100B; serving smoke tests passed on explicit configurations. The dashboard now distinguishes profile configuration, tokenizer preparation and verified remote smoke runs.
+![Local checks](https://github.com/offroadguy/inference-lab/actions/workflows/test.yml/badge.svg)
 
-- Hashed token-length-controlled workloads, regular/Poisson arrivals and repeated load campaigns.
-- Aggregate campaign spending approval, resumable child runs and explicit capacity evidence gates.
-- Goodput, scheduling lag, confidence intervals and separate server/device telemetry.
-- A 40-case versioned quality suite plus custom JSONL evaluation sets.
-- Optional local upstream vLLM cross-check and resource-attributed billing reconciliation.
+## Dashboard preview
 
-See the [complete multi-model workflow and validation boundaries](docs/multi-model-evaluation.md).
+Development screenshots below show the JSON autofill editor and recorded model readiness.
+A fresh clone does **not** include these private local run journals; generate the free demo
+or execute your own approved experiment to populate your dashboard.
 
-```sh
-uv run inference-lab models
-uv run inference-lab plan --profile qwen-3b --config examples/sweep-simulated.json
-```
+![JSON configuration editor with explicit smoke and load autofill](docs/images/json-autofill.png)
+
+<details>
+<summary>Model readiness screenshot</summary>
+
+![Recorded model readiness during development](docs/images/model-readiness.png)
+
+</details>
 
 ## Run the free local demo
 
-Requires Python 3.12 and [uv](https://docs.astral.sh/uv/).
+Requires Python 3.12 and [uv](https://docs.astral.sh/uv/) on macOS or Linux. No GPU, CUDA, cloud credentials or Docker needed for the simulator. Native Windows is unsupported (`fcntl` locking).
 
 ```sh
 git clone https://github.com/offroadguy/inference-lab.git
@@ -36,7 +42,7 @@ uv run python -m inference_lab.demo
 uv run streamlit run src/inference_lab/dashboard.py --server.address=127.0.0.1
 ```
 
-Open http://localhost:8501. The demo runs five **synthetic** experiments: baseline, a concurrency change, higher offered load, injected HTTP 503, and a healthy recovery run. It generates `data/simulated-demo.json` and a report directory per run. This tests the software; its timings and placeholder token counts are **not model or GPU evidence**.
+Open [localhost:8501](http://localhost:8501), then **Runs → Simulated**. The demo runs five **synthetic** experiments: baseline, a concurrency change, higher offered load, injected HTTP 503, and a healthy recovery run. It generates `data/simulated-demo.json` and a report directory per run. This tests the software; its timings and placeholder token counts are **not model or GPU evidence**.
 
 For a single run:
 
@@ -59,14 +65,32 @@ docker compose run --rm cli plan --provider simulated
 
 Dashboard port binds to localhost. Only the CLI container reads `.env`. The Docker image build, containerized simulator and dashboard smoke check passed. Native Python was also verified.
 
+## Multi-model evaluation
+
+**Four configured checkpoints:** Qwen2.5-Instruct 0.5B, 3B, 7B and 32B. All are below 100B; serving smoke tests passed on explicit configurations. The dashboard now distinguishes profile configuration, tokenizer preparation and verified remote smoke runs.
+
+- Hashed token-length-controlled workloads, regular/Poisson arrivals and repeated load campaigns.
+- Aggregate campaign spending approval, resumable child runs and explicit capacity evidence gates.
+- Goodput, scheduling lag, confidence intervals and separate server/device telemetry.
+- A 40-case versioned quality suite plus custom JSONL evaluation sets.
+- Optional local upstream vLLM cross-check and resource-attributed billing reconciliation.
+
+See the [complete multi-model workflow and validation boundaries](docs/multi-model-evaluation.md).
+
+```sh
+uv run inference-lab models
+uv run inference-lab plan --profile qwen-3b --config examples/sweep-simulated.json
+```
+
 ## A cloud run (billable, requires your typed approval)
 
 1. Copy `.env.example` to `.env` and set your Modal token locally, or use Modal's existing local credential store. Do not commit credentials. No Hugging Face token is required for the selected public model.
-2. Copy `examples/modal-chat.json` to a local config. Verify current [Modal pricing](https://modal.com/pricing), update the rates and `pricing_checked` (maximum age seven days), and choose your limits. Credits and expiry remain unknown unless you independently verify them in your account. Sandbox CPU/memory pricing differs from Function pricing.
+2. Copy `examples/modal-chat.json` to `experiment.json` (or download a config from New experiment). Verify current [Modal pricing](https://modal.com/pricing), update the rates and `pricing_checked` (maximum age seven days), and choose your limits. Credits and expiry remain unknown unless you independently verify them in your account. Sandbox CPU/memory pricing differs from Function pricing.
 3. Review and approve:
 
 ```sh
-uv run inference-lab plan --config examples/modal-chat.json
+uv run inference-lab preflight --config experiment.json
+uv run inference-lab plan --config experiment.json
 uv run inference-lab approve RUN_ID
 # Type the exact phrase shown, including run ID and maximum USD amount.
 uv run inference-lab run RUN_ID
@@ -113,7 +137,7 @@ flowchart LR
 
 Supported profiles use Qwen2.5-Instruct 0.5B/3B/7B/32B at fixed Hugging Face commits, vLLM 0.11.0, FP16 by default (BF16 selectable) and no quantization. L4 and A100 hardware envelopes are reviewed per profile; 32B uses two 80GB A100s with tensor parallelism. Unsupported combinations fail before provisioning. Local dependencies are locked in `uv.lock`; the server image is version-tagged. The bounded Hugging Face onboarding workflow supports additional dense architecture families through metadata checks; each new model still needs GPU validation. Universal sub-100B compatibility and Superlinked integration are not claimed.
 
-## Engineering and interview evidence
+## Engineering evidence
 
 - [Architecture, memory and cost reasoning](docs/architecture.md)
 - [Experiment and measurement discipline](docs/methodology.md)
@@ -146,3 +170,20 @@ planned requests with every request successful, an intact matching workload mani
 conformant controlled lengths when applicable and verified cleanup. It is not a capacity
 or model-quality qualification. Brand assets identify model source, publisher and compute;
 they do not imply endorsement or additional cloud integrations.
+
+## About the author
+
+Built by **Venkata Ganji** as an independent inference infrastructure project,
+with OpenAI Codex assistance.
+
+- [LinkedIn — Venkata Sai Ganji](https://www.linkedin.com/in/venkata-sai-ganji-3a30a2a4/)
+- [Architecture portfolio](https://offroadguy.github.io/)
+- [GitHub](https://github.com/offroadguy)
+
+For project questions and reproducible bugs, [open an issue](https://github.com/offroadguy/inference-lab/issues).
+
+## License
+
+Copyright 2026 Venkata Ganji. Project code and documentation are licensed under
+[Apache-2.0](LICENSE). Dependencies, model weights, tokenizers and brand assets
+retain their respective licenses and trademark rights; see [NOTICE](NOTICE).

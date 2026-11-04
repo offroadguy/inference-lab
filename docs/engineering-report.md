@@ -1,4 +1,51 @@
-# Engineering report — 2026-11-03
+# Engineering validation report
+
+## Current evidence — November 3, 2026 (Pacific)
+
+**Release posture: experimental public preview.** The project is suitable for public
+local trials and bounded GPU experiments, with the limitations below. “Expert-level”
+is not a certification; reproducibility and honest evidence matter more than that label.
+
+- **54 tests passed** in the working checkout and an isolated clean copy with cloud
+  credentials removed from its environment. Frozen dependency installation, free
+  simulator and all five dashboard pages passed in that clean copy.
+- Editor tests cover JSON syntax errors, invalid preflight, explicit autofill,
+  preserving other manual edits and withholding validated downloads for invalid plans.
+- All four pinned Qwen2.5 profiles (0.5B, 3B, 7B, 32B) have historical 60-request
+  remote smoke results on explicit hardware. They are not cross-model quality rankings.
+- A fresh Qwen2.5-0.5B-Instruct / A100-40GB run used configuration produced through
+  dashboard smoke autofill: 128 input / 32 output tokens, 1 offered request/sec,
+  concurrency 2, 60/60 successes, 752.5 ms client p95 latency, 396.9 ms client p95
+  first-content latency, 32.18 output tokens/sec. All six smoke checks passed.
+- Resource cost estimate: **$0.094**, not reconciled billing. Provider termination
+  was independently checked after automatic cleanup. Twelve telemetry samples were recorded.
+- The selected run rendered in the dashboard, and its full evidence payload matched
+  CLI JSON export, including provenance and smoke checks.
+
+[Machine-readable summary](smoke-result-2026-11-03.json) records the tested source
+commit, model revision, settings and metrics. These are maintainer-reported results;
+raw local journals are not included, so this summary alone is not independently
+auditable benchmark evidence. Reproduce with your own account and preserve exports.
+
+## Remaining validation gaps
+
+- Sustained capacity and repeated operating points: the short run fails the sample,
+  observation-window and error-confidence requirements. No capacity claim follows.
+- All four workload types have not been freshly exercised on every model/hardware pair.
+- Hugging Face onboarding of additional architecture families and gated-model secrets
+  still need end-to-end GPU evidence beyond metadata and local tests.
+- General model quality, production SLOs, provider failure attribution, billing
+  reconciliation and upstream vLLM agreement remain separate evidence requirements.
+- The server image is version-tagged, not digest-pinned. High-rate client overhead,
+  broad OS support and concurrent multi-user operation are not qualified.
+- The dashboard is local and unauthenticated; it is not a hosted multi-tenant service.
+
+## Historical implementation notes
+
+The following records describe **earlier development stages**, before the cloud runs
+above. Their test counts and “no GPU” statements are historical, not current status.
+
+### Initial development log
 
 ## Multi-model implementation update
 

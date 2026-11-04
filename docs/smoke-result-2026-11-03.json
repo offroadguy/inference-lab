@@ -1,0 +1,46 @@
+{
+  "scope": "Maintainer-reported single serving smoke run; raw local journal is not published. Not independent verification or capacity qualification.",
+  "date_pacific": "2026-11-03",
+  "source_commit": "bde7b3a",
+  "model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "revision": "7ae557604adf67be50417f59c2c2f167def9a775",
+  "hardware": {
+    "gpu": "A100-40GB",
+    "gpu_count": 1
+  },
+  "workload": {
+    "workload": "tokens",
+    "requests": 60,
+    "rate": 1.0,
+    "concurrency": 2,
+    "input_lengths": [
+      128
+    ],
+    "output_lengths": [
+      32
+    ],
+    "image": "vllm/vllm-openai:v0.11.0"
+  },
+  "results": {
+    "successful": 60,
+    "offered": 60,
+    "latency_p95_s": 0.7525129441404715,
+    "ttft_p95_s": 0.3968798978254199,
+    "output_tokens_s": 32.18324217084783,
+    "resource_cost_estimate_usd": 0.09402271353590011,
+    "capacity_exclusions": [
+      "insufficient successful samples",
+      "less than 60s of complete steady-state observation",
+      "error-rate upper bound exceeds target"
+    ]
+  },
+  "smoke_checks": {
+    "Remote model identity verified": true,
+    "Run and benchmark completed": true,
+    "At least 10 planned requests; every request succeeded": true,
+    "Prepared workload integrity verified": true,
+    "Controlled token lengths match": true,
+    "Resource cleanup verified": true
+  },
+  "billing": "Estimate only; not reconciled with provider bill"
+}
