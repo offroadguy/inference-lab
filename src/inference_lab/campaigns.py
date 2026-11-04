@@ -45,7 +45,9 @@ def create(store, profiles, rates, repetitions, config, max_spend):
             if not math.isfinite(rate) or rate <= 0:
                 raise ValueError("Rates must be positive and finite")
             for rep in range(1, repetitions + 1):
-                values = {**config, **profile_config(key), "rate": rate, "repetition": rep}
+                if key == "custom" and not config.get("model_metadata"):
+                    raise ValueError("Custom sweeps require an onboarded model config")
+                values = {**config, **({} if key == "custom" else profile_config(key)), "rate": rate, "repetition": rep}
                 # Explicit profile controls resource envelope; config controls approved time budgets.
                 plan = Plan(**values)
                 plan.validate()

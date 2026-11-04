@@ -18,6 +18,7 @@ dependencies = [
   "uvicorn==0.38.0",
   "prometheus-client==0.23.1",
   "tokenizers==0.22.1",
+  "huggingface-hub==1.33.0",
 ]
 
 [project.scripts]

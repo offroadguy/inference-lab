@@ -1,12 +1,14 @@
 # Inference Lab
 
-A local-first inference engineering lab: choose one of four pinned model profiles, review and approve a spending plan, run streamed workloads on a remote Modal GPU, and inspect persistent results in a local Streamlit dashboard.
+A local-first inference experiment harness: onboard a supported Hugging Face model, pin its configuration and workload, review a spending plan, and compare recorded latency, throughput, quality and resource evidence.
 
-**Status:** the local simulator, four pinned tokenizer pipelines, measurement logic, approval guardrails and recovery tests are verified. The Modal/vLLM adapter is implemented and checked against the installed SDK, but **has not been GPU-deployed or benchmarked**. No real performance, capacity, cost savings or model-quality claims are made. See [verified results](docs/engineering-report.md).
+**Evidence status:** Qwen2.5 0.5B, 3B, 7B and 32B each completed a 60-request remote smoke test during development. This establishes serving compatibility for those tested configurations, not maximum capacity or model quality. Raw local run journals are not bundled in the public repository. A fresh clone starts empty; the free simulator generates clearly labeled synthetic results. New Hugging Face onboarding is metadata- and locally tested, not yet GPU-validated for a new model family.
+
+See [the reproducible onboarding and experiment workflow](docs/bring-your-model.md).
 
 ## Multi-model evaluation
 
-**Four configured checkpoints:** Qwen2.5-Instruct 0.5B, 3B, 7B and 32B. All are below 100B; none is claimed GPU-validated yet. The dashboard now distinguishes profile configuration, tokenizer preparation and verified remote smoke runs.
+**Four configured checkpoints:** Qwen2.5-Instruct 0.5B, 3B, 7B and 32B. All are below 100B; serving smoke tests passed on explicit configurations. The dashboard now distinguishes profile configuration, tokenizer preparation and verified remote smoke runs.
 
 - Hashed token-length-controlled workloads, regular/Poisson arrivals and repeated load campaigns.
 - Aggregate campaign spending approval, resumable child runs and explicit capacity evidence gates.
@@ -26,6 +28,8 @@ uv run inference-lab plan --profile qwen-3b --config examples/sweep-simulated.js
 Requires Python 3.12 and [uv](https://docs.astral.sh/uv/).
 
 ```sh
+git clone https://github.com/offroadguy/inference-lab.git
+cd inference-lab
 uv sync --frozen
 uv run pytest -q
 uv run python -m inference_lab.demo
@@ -107,7 +111,7 @@ flowchart LR
     DB --> Files[JSONL / JSON / CSV / Markdown]
 ```
 
-Supported profiles use Qwen2.5-Instruct 0.5B/3B/7B/32B at fixed Hugging Face commits, vLLM 0.11.0, FP16 and no quantization. L4 and A100 hardware envelopes are reviewed per profile; 32B uses two 80GB A100s with tensor parallelism. Unsupported combinations fail before provisioning. Local dependencies are locked in `uv.lock`; the server image is version-tagged. More families, arbitrary sub-100B models and Superlinked remain extensions requiring separate validation.
+Supported profiles use Qwen2.5-Instruct 0.5B/3B/7B/32B at fixed Hugging Face commits, vLLM 0.11.0, FP16 by default (BF16 selectable) and no quantization. L4 and A100 hardware envelopes are reviewed per profile; 32B uses two 80GB A100s with tensor parallelism. Unsupported combinations fail before provisioning. Local dependencies are locked in `uv.lock`; the server image is version-tagged. The bounded Hugging Face onboarding workflow supports additional dense architecture families through metadata checks; each new model still needs GPU validation. Universal sub-100B compatibility and Superlinked integration are not claimed.
 
 ## Engineering and interview evidence
 

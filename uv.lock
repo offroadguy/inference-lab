@@ -434,6 +434,7 @@ source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "huggingface-hub" },
     { name = "modal" },
     { name = "pandas" },
     { name = "plotly" },
@@ -454,6 +455,7 @@ dev = [
 requires-dist = [
     { name = "fastapi", specifier = "==0.121.0" },
     { name = "httpx", specifier = "==0.28.1" },
+    { name = "huggingface-hub", specifier = "==1.33.0" },
     { name = "modal", specifier = "==1.6.3" },
     { name = "pandas", specifier = "==2.3.3" },
     { name = "plotly", specifier = "==6.4.0" },

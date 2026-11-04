@@ -21,6 +21,24 @@ class Provider(Protocol):
     def teardown(self, run: dict, store): ...
 
 
+def serving_command(plan):
+    args = ["vllm", "serve", plan.model, "--revision", plan.revision,
+            "--tokenizer-revision", plan.revision, "--host", "0.0.0.0", "--port", "8000",
+            "--dtype", plan.dtype, "--max-model-len", str(plan.max_model_len), "--max-num-seqs", str(plan.server_max_sequences),
+            "--tensor-parallel-size", str(plan.gpu_count),
+            "--gpu-memory-utilization", str(plan.gpu_memory_utilization), "--seed", str(plan.seed),
+            "--enable-prefix-caching" if plan.prefix_caching else "--no-enable-prefix-caching"]
+    if plan.model_metadata:
+        args += ["--load-format", "safetensors"]
+    if plan.enforce_eager:
+        args.append("--enforce-eager")
+    if plan.max_num_batched_tokens is not None:
+        args += ["--max-num-batched-tokens", str(plan.max_num_batched_tokens)]
+    if plan.chunked_prefill is not None:
+        args.append("--enable-chunked-prefill" if plan.chunked_prefill else "--no-enable-chunked-prefill")
+    return args
+
+
 class ModalProvider:
     APP = "inference-lab"
 
@@ -51,14 +69,10 @@ class ModalProvider:
         store.save(run)  # Write-ahead intent before any provisioning call.
         app = modal.App.lookup(self.APP, create_if_missing=True)
         image = modal.Image.from_registry(plan.image).entrypoint([])
-        args = ["vllm", "serve", plan.model, "--revision", plan.revision,
-                "--tokenizer-revision", plan.revision, "--host", "0.0.0.0", "--port", "8000",
-                "--dtype", plan.dtype, "--max-model-len", str(plan.max_model_len), "--max-num-seqs", str(plan.server_max_sequences),
-                "--tensor-parallel-size", str(plan.gpu_count),
-                "--gpu-memory-utilization", "0.80", "--seed", str(plan.seed), "--enforce-eager",
-                "--enable-prefix-caching" if plan.prefix_caching else "--no-enable-prefix-caching"]
+        args = serving_command(plan)
+        secrets = [modal.Secret.from_name(plan.hf_secret_name, required_keys=["HF_TOKEN"])] if plan.hf_secret_name else []
         self.sb = modal.Sandbox.create(
-            *args, app=app, name="run-" + run["id"], image=image, gpu=f"{plan.gpu}:{plan.gpu_count}",
+            *args, app=app, name="run-" + run["id"], image=image, secrets=secrets, gpu=f"{plan.gpu}:{plan.gpu_count}",
             cpu=(plan.cpu_cores, plan.cpu_cores), memory=(plan.ram_gib * 1024, plan.ram_gib * 1024), timeout=plan.runtime_s,
         )
         run["resource_id"] = self.sb.object_id

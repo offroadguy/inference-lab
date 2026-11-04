@@ -102,6 +102,15 @@ def main():
     parser = argparse.ArgumentParser(description="Local-first inference lab; no cloud spending without typed approval")
     parser.add_argument("--data", help="Local results directory (default data/)")
     sub = parser.add_subparsers(dest="command", required=True)
+    p = sub.add_parser("preflight")
+    p.add_argument("--config", type=Path, required=True)
+    p = sub.add_parser("onboard")
+    p.add_argument("model")
+    p.add_argument("--revision", default="main")
+    p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--gpu", choices=["L4", "A100-40GB", "A100-80GB"], default="A100-40GB")
+    p.add_argument("--gpu-count", type=int, choices=[1,2,4], default=1)
+    p.add_argument("--hf-secret-name")
     p = sub.add_parser("plan")
     p.add_argument("--config", type=Path)
     p.add_argument("--profile", choices=list(ALL_PROFILES))
@@ -128,7 +137,33 @@ def main():
     args = parser.parse_args()
     store = Store(args.data)
     try:
-        if args.command == "sweep-plan":
+        if args.command == "preflight":
+            from .onboarding import preflight_report
+            print(json.dumps(preflight_report(Plan(**json.loads(args.config.read_text()))), indent=2))
+        elif args.command == "onboard":
+            import os
+            from .onboarding import inspect_model, HARDWARE
+            if args.output.exists():
+                raise ValueError("Output already exists; choose a new path")
+            try:
+                metadata = inspect_model(args.model, args.revision, token=os.getenv("HF_TOKEN") or False)
+            except Exception as exc:
+                if isinstance(exc, ValueError):
+                    raise
+                raise ValueError(f"Hugging Face inspection failed ({type(exc).__name__}); check access and metadata") from None
+            plan = Plan(provider="modal", model=args.model, revision=metadata['revision'],
+                        model_metadata=metadata, gpu=args.gpu, gpu_count=args.gpu_count,
+                        gpu_usd_s=HARDWARE[args.gpu][1], cpu_cores=4, ram_gib=32,
+                        hf_secret_name=args.hf_secret_name, workload="tokens", max_spend_usd=10,
+                        max_model_len=2048, server_max_sequences=4,
+                        input_lengths=(128,), output_lengths=(32,), requests=60, rate=1)
+            from dataclasses import replace
+            replace(plan, provider="simulated").validate()
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(json.dumps(plan.to_dict(), indent=2))
+            print(json.dumps({"config":str(args.output), "model":plan.model, "revision":plan.revision,
+                              "status":"metadata_checked_not_gpu_validated", "estimate":plan.estimate()}, indent=2))
+        elif args.command == "sweep-plan":
             from .campaigns import create
             campaign = create(store, args.profiles.split(","), [float(x) for x in args.rates.split(",")],
                               args.repetitions, json.loads(args.config.read_text()), args.max_spend_usd)

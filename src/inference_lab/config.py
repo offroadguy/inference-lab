@@ -55,6 +55,12 @@ class Plan:
     other_charge_allowance_usd: float = 0.25
     target_p95_s: float = 15.0
     target_error_rate: float = 0.05
+    model_metadata: dict | None = None
+    hf_secret_name: str | None = None
+    gpu_memory_utilization: float = 0.80
+    enforce_eager: bool = True
+    max_num_batched_tokens: int | None = None
+    chunked_prefill: bool | None = None
     prefix_caching: bool = False
     hypothesis: str = "Establish the baseline"
     baseline_id: str | None = None
@@ -64,18 +70,39 @@ class Plan:
     def validate(self):
         if type(self.prefix_caching) is not bool:
             raise ValueError("prefix_caching must be a boolean")
-        profile = profile_for(self.model, self.gpu)
+        import re
+        if self.hf_secret_name is not None and not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', self.hf_secret_name):
+            raise ValueError("Use a Modal secret name, never a token value")
+        if self.hf_secret_name and re.fullmatch(r'hf_[A-Za-z0-9]{20,}', self.hf_secret_name):
+            raise ValueError("A Hugging Face token is not a Modal secret name")
+        if type(self.enforce_eager) is not bool or (self.chunked_prefill is not None and type(self.chunked_prefill) is not bool):
+            raise ValueError("Engine switches must be booleans")
+        if isinstance(self.gpu_memory_utilization, bool) or not isinstance(self.gpu_memory_utilization, (int, float)) or not .5 <= self.gpu_memory_utilization <= .9:
+            raise ValueError("GPU memory utilization must be 0.5–0.9")
+        if self.max_num_batched_tokens is not None:
+            if type(self.max_num_batched_tokens) is not int or not 512 <= self.max_num_batched_tokens <= 32768:
+                raise ValueError("Batched token budget must be 512–32768")
+            if self.chunked_prefill is not True and self.max_num_batched_tokens < self.max_model_len:
+                raise ValueError("A batched token budget below context requires explicit chunked prefill")
+        if self.dtype not in {"half", "bfloat16"}:
+            raise ValueError("Only FP16 and BF16 serving are supported")
+        if self.model_metadata is not None:
+            from .onboarding import custom_profile
+            profile = custom_profile(self)
+        else:
+            profile = profile_for(self.model, self.gpu)
         if (self.revision, self.image, self.gpu, self.gpu_count, self.dtype, self.quantization,
             self.cpu_cores, self.ram_gib) != (
-            profile.revision, IMAGE, profile.gpu, profile.gpu_count, "half", "none",
+            profile.revision, IMAGE, profile.gpu, profile.gpu_count, self.dtype, "none",
             profile.cpu_cores, profile.ram_gib
         ):
             raise ValueError("Model, revision and hardware must match a reviewed profile")
-        if type(self.max_model_len) is not int or not 512 <= self.max_model_len <= 4096:
-            raise ValueError("Context must be 512–4096 tokens")
+        if type(self.max_model_len) is not int or not 512 <= self.max_model_len <= 32768:
+            raise ValueError("Context must be 512–32768 tokens")
         if type(self.server_max_sequences) is not int or not 1 <= self.server_max_sequences <= 32:
             raise ValueError("Server sequence cap must be 1–32")
         budget = profile.memory_budget(self.max_model_len, self.server_max_sequences)
+        budget["engine_budget_gib"] = profile.gpu_gib * profile.gpu_count * self.gpu_memory_utilization
         if budget["estimated_total_gib"] > budget["engine_budget_gib"]:
             raise ValueError("Analytical weights/KV/overhead budget exceeds engine memory envelope")
         if self.arrival not in {"regular", "poisson"}:

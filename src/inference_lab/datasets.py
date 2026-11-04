@@ -1,6 +1,7 @@
 """Prepare and hash workloads before approving cloud spending."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import random
 from .evaluation import VERSION, builtin_cases, validate_cases
@@ -29,7 +30,7 @@ def prepare(plan, tokenizer=None):
     if plan.workload == "tokens":
         if tokenizer is None:
             from tokenizers import Tokenizer
-            tokenizer = Tokenizer.from_pretrained(plan.model, revision=plan.revision)
+            tokenizer = Tokenizer.from_pretrained(plan.model, revision=plan.revision, token=os.getenv("HF_TOKEN") or None)
         encoded = [tokenizer.encode(p, add_special_tokens=False).ids for p in PASSAGES]
         if not all(encoded):
             raise ValueError("Tokenizer produced an empty corpus")
@@ -70,7 +71,16 @@ def create_run(store, plan, manifest=None):
     plan.validate()
     manifest = manifest or prepare(plan)
     validate_manifest(manifest)
+    if manifest.get("model") != plan.model or manifest.get("tokenizer_revision") != plan.revision or len(manifest.get("records", [])) != plan.requests:
+        raise ValueError("Prepared workload does not match plan model, revision or request count")
     run = store.create(plan)
+    sources = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in Path(__file__).parent.glob("*.py")}
+    run["provenance"] = {"source_files_sha256": sources, "source_tree_sha256": digest(sources),
+                         "plan_fingerprint": plan.fingerprint(), "workload_sha256": manifest["sha256"]}
+    from importlib.metadata import version
+    run["provenance"]["client_versions"] = {name: version(name) for name in ["httpx", "modal", "tokenizers", "huggingface-hub"]}
+    lock = Path(__file__).resolve().parents[2] / "uv.lock"
+    run["provenance"]["dependency_lock_sha256"] = hashlib.sha256(lock.read_bytes()).hexdigest() if lock.exists() else None
     run["manifest"] = manifest
     store.save(run)
     from .reference import prepare_reference

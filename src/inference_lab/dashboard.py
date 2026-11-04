@@ -136,13 +136,23 @@ def verified(run, requests):
 def registry(runs, requests):
     entries = []
     for key, profile in PROFILES.items():
-        matching = [r for r in runs if r["plan"]["model"] == profile.model and r["plan"]["provider"] == "modal"]
+        matching = [r for r in runs if r["plan"]["model"] == profile.model and r["plan"]["revision"] == profile.revision and r["plan"]["provider"] == "modal"]
         passed = [r for r in matching if verified(r, requests)]
         attempted = [r for r in matching if r.get("deploy_intent") or r["status"] != "planned"]
         entries.append({"Profile": key, "Parameters (B)": profile.parameters_b,
                         "Default hardware": f"{profile.gpu_count} × {profile.gpu}",
                         "Validated hardware": ", ".join(sorted({f"{r['plan']['gpu_count']} × {r['plan']['gpu']}" for r in passed})) or "None",
                         "Readiness": "Smoke validated" if passed else "Attempted · not validated" if attempted else "Not launched",
+                        "Validated runs": len(passed)})
+    known = {(p.model, p.revision) for p in PROFILES.values()}
+    for model, revision in sorted({(r['plan']['model'], r['plan']['revision']) for r in runs} - known):
+        matching = [r for r in runs if (r['plan']['model'], r['plan']['revision']) == (model, revision)]
+        passed = [r for r in matching if verified(r, requests)]
+        p = matching[0]['plan']
+        entries.append({"Profile": model + " @ " + revision[:8], "Parameters (B)": (p.get('model_metadata') or {}).get('parameter_count', 0)/1e9,
+                        "Default hardware": f"{p['gpu_count']} × {p['gpu']}",
+                        "Validated hardware": ", ".join(sorted({f"{r['plan']['gpu_count']} × {r['plan']['gpu']}" for r in passed})) or "None",
+                        "Readiness": "Smoke validated" if passed else "Prepared · GPU validation pending",
                         "Validated runs": len(passed)})
     return entries
 
@@ -220,8 +230,13 @@ def render():
         workspace_overview(runs, requests)
         return
     if page == "Models":
-        st.caption("Four pinned Qwen2.5 profiles. Configured capability and validated execution are separate states.")
+        st.caption("Built-in and onboarded models. Metadata checks and validated execution are separate states.")
         st.dataframe(pd.DataFrame(registry(runs, requests)), hide_index=True, width="stretch")
+        with st.expander("Bring a Hugging Face model · no GPU launch"):
+            st.code("uv run inference-lab onboard HuggingFaceTB/SmolLM2-135M-Instruct --output data/my-model.json\n"
+                    "uv run inference-lab preflight --config data/my-model.json\n"
+                    "uv run inference-lab plan --config data/my-model.json", language="bash")
+            st.caption("CLI workflow. Inspect the generated config and current prices. Plan downloads tokenizer assets; paid execution requires a separate approval and run command. Dense Llama/Mistral/Qwen2/Qwen3 architectures only; no custom repository Python.")
         panel("Validation scope", "A completed smoke test demonstrates that one configuration served requests. It does not qualify capacity or quality, or validate every model below 100B.")
         for key, profile in PROFILES.items():
             with st.expander(f"{key} · configuration and analytical memory budget"):
@@ -343,6 +358,8 @@ def render():
             baseline = by_id[baseline_id]
             baseline_summary = summarize(baseline, requests[baseline_id])
             delta = compare({"run": baseline, "summary": baseline_summary}, {"run": run, "summary": summary})
+            for caveat in delta.get("comparability_caveats", []):
+                st.warning(caveat)
             changes = delta["controlled_changes"]
             if delta["single_variable"]:
                 st.success("One configuration variable changed. Review repetitions and quality before drawing conclusions.")

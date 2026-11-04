@@ -54,6 +54,16 @@ def summarize(run, records):
     quality_cases = {r.get("case_id") for r in ok if r.get("quality_category")}
     expected_cases = {r["id"] for r in run.get("manifest", {}).get("records", []) if r.get("quality_case")}
     reasons = []
+    from .datasets import validate_manifest
+    try:
+        validate_manifest(run.get("manifest", {}))
+        manifest_valid = bool(run.get("manifest"))
+    except ValueError:
+        manifest_valid = False
+    if not manifest_valid:
+        reasons.append("prepared workload integrity missing or invalid")
+    if (run.get("approval") or {}).get("fingerprint") != plan.fingerprint():
+        reasons.append("current plan does not match recorded approval")
     if plan.provider != "modal":
         reasons.append("simulated evidence")
     if run.get("status") != "complete" or run.get("shutdown") != "verified":
@@ -68,6 +78,11 @@ def summarize(run, records):
         reasons.append("token-length control absent or mismatched")
     if p95 is None or p95 > plan.target_p95_s:
         reasons.append("latency target not met")
+    for field, target, name in [("ttft_s", plan.target_ttft_s, "first-content"), ("tpot_s", plan.target_tpot_s, "time-per-output-token")]:
+        values = [r[field] for r in ok if r.get(field) is not None]
+        observed = percentile(values, .95)
+        if len(values) != len(ok) or observed is None or observed > target:
+            reasons.append(f"{name} p95 target not met or samples missing")
     if error_interval is None or error_interval[1] > plan.target_error_rate:
         reasons.append("error-rate upper bound exceeds target")
     if lag_p95 is None or lag_p95 > max(.01, .1/plan.rate):
@@ -79,6 +94,8 @@ def summarize(run, records):
     billing = run.get("billing", {})
     actual_cost = billing.get("total_usd")
     return {
+        "manifest_integrity_verified": manifest_valid,
+        "plan_fingerprint": plan.fingerprint(),
         "goodput_rps": len(good)/duration if duration and complete_window else None,
         "good_requests": len(good), "error_rate_wilson_95": error_interval,
         "latency_p95_bootstrap_95_s": run.get("analysis", {}).get("latency_p95_bootstrap_95_s"),
@@ -166,6 +183,16 @@ def compare(a, b):
     allowed = {"hypothesis", "baseline_id", "repetition"}
     changes = {k: (pa[k], pb[k]) for k in pa
                if pa[k] != pb[k] and k not in allowed}
-    return {"controlled_changes": changes, "single_variable": len(changes) == 1,
+    caveats = []
+    for field, description in [("source_tree_sha256", "source code"), ("dependency_lock_sha256", "dependency lock")]:
+        left = a["run"].get("provenance", {}).get(field)
+        right = b["run"].get("provenance", {}).get(field)
+        if not left or not right:
+            caveats.append(f"Comparable {description} provenance is unavailable")
+        elif left != right:
+            caveats.append(f"{description.title()} changed between runs")
+    if a['run'].get('environment') != b['run'].get('environment'):
+        caveats.append("Recorded client environment changed")
+    return {"comparability_caveats": caveats, "controlled_changes": changes, "single_variable": len(changes) == 1,
             "baseline": a["summary"], "candidate": b["summary"],
             "warning": "No improvement claim without repetitions, comparable environment and quality review."}
