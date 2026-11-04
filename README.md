@@ -2,6 +2,18 @@
 
 A local-first inference experiment harness: onboard a supported Hugging Face model, pin its configuration and workload, review a spending plan, and compare recorded latency, throughput, quality and resource evidence.
 
+## Why I built this
+
+I've spent the last 2.5 years working as an AI infrastructure platform engineer at Apple. I'm also an inference engineering enthusiast—the kind who sees a model running and immediately wants to know: **What happens when we turn up the load? Where does latency start to climb? Can I reproduce that result tomorrow?**
+
+I built Inference Lab for myself: a place to bring a model, test a hypothesis, change a configuration, and keep the evidence. I wanted to see the whole experiment together—model revision, workload, hardware, latency, throughput, failures, and estimated cost—so I could understand what actually changed between runs.
+
+That curiosity became this project. Start with a free local simulation, move to a bounded GPU experiment when you're ready, and inspect the results all the way down to individual requests. A successful run is satisfying. An experiment that teaches you *why* it behaved that way is much more interesting.
+
+I'm sharing it for other engineers who enjoy asking those questions. **Clone it, bring your own hypothesis, and help make the experiments better.**
+
+This is my independent personal project, developed with OpenAI Codex assistance; it is not an Apple product or an account of Apple's internal systems.
+
 **Evidence status:** Qwen2.5 0.5B, 3B, 7B and 32B each completed a 60-request remote smoke test during development. This establishes serving compatibility for those tested configurations, not maximum capacity or model quality. Raw local run journals are not bundled in the public repository. A fresh clone starts empty; the free simulator generates clearly labeled synthetic results. New Hugging Face onboarding is metadata- and locally tested, not yet GPU-validated for a new model family.
 
 **Status: experimental public preview.** Suitable for trying the local demo and bounded,
