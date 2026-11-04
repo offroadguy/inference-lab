@@ -143,18 +143,49 @@ def summarize(run, records):
     }
 
 
+def smoke_checks(run, records):
+    from .datasets import validate_manifest
+    plan = run['plan']
+    rows = [r for r in records if r.get('phase') == 'steady']
+    try:
+        validate_manifest(run.get('manifest', {}))
+        manifest = run['manifest']
+        intact = (manifest.get('model') == plan['model'] and manifest.get('tokenizer_revision') == plan['revision']
+                  and len(manifest.get('records', [])) == plan['requests'])
+    except ValueError:
+        intact = False
+    return {
+        'Remote model identity verified': plan['provider'] == 'modal' and bool(run.get('server_identity', {}).get('verified')),
+        'Run and benchmark completed': run['status'] == 'complete' and 'benchmark' in run.get('stages', []),
+        'At least 10 planned requests; every request succeeded': plan['requests'] >= 10 and len(rows) == plan['requests'] and all(r['status'] == 'success' for r in rows),
+        'Prepared workload integrity verified': intact,
+        'Controlled token lengths match': plan['workload'] != 'tokens' or bool(rows) and all(r.get('length_conformant') is True for r in rows),
+        'Resource cleanup verified': run['shutdown'] == 'verified',
+    }
+
+
+def evidence_bundle(run, rows, events):
+    """Identical portable payload for CLI and dashboard, without mutating the journal."""
+    from copy import deepcopy
+    snapshot = deepcopy(run)
+    latency = [r['latency_s'] for r in rows if r['phase'] == 'steady' and r['status'] == 'success']
+    snapshot.setdefault('analysis', {})['latency_p95_bootstrap_95_s'] = bootstrap_interval(latency)
+    summary = summarize(snapshot, rows)
+    if snapshot.get('reference', {}).get('metrics'):
+        from .reference import crosscheck
+        summary['reference_crosscheck'] = crosscheck(summary, snapshot['reference']['metrics'])
+    return {'schema_version': 1, 'run': snapshot, 'summary': summary,
+            'requests': rows, 'events': events, 'smoke_checks': smoke_checks(snapshot, rows)}
+
+
 def export(store, run):
     rows = store.requests(run["id"])
-    latency = [r["latency_s"] for r in rows if r["phase"] == "steady" and r["status"] == "success"]
-    run["analysis"] = {"latency_p95_bootstrap_95_s": bootstrap_interval(latency)}
+    payload = evidence_bundle(run, rows, store.events(run['id']))
+    run['analysis'] = payload['run']['analysis']
     store.save(run)
-    summary = summarize(run, rows)
-    if run.get("reference", {}).get("metrics"):
-        from .reference import crosscheck
-        summary["reference_crosscheck"] = crosscheck(summary, run["reference"]["metrics"])
-    folder = store.root / run["id"]
+    summary = payload['summary']
+    folder = store.root / run['id']
     folder.mkdir(exist_ok=True)
-    payload = {"run": run, "summary": summary, "requests": rows, "events": store.events(run["id"])}
     (folder / "report.json").write_text(json.dumps(payload, indent=2))
     fields = ["id", "phase", "status", "error", "case_id", "quality_category", "input_tokens_target",
               "output_tokens_target", "length_conformant", "schedule_lag_s", "prompt_chars", "output_chars", "prompt_tokens", "output_tokens",

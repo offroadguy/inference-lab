@@ -125,3 +125,21 @@ The implementation was authored with OpenAI Codex assistance for Venkata Ganji. 
 ### Explicit alternate hardware
 
 `qwen-0.5b-a100` and `qwen-3b-a100` select one A100-40GB instead of L4, preserving model and tokenizer revisions, FP16, CPU and RAM limits. Use `plan --profile` to select them explicitly. Hardware changes produce a new plan fingerprint and require fresh approval; there is no automatic GPU substitution. Dashboard readiness lists the hardware actually validated, separately from the default profile. Timing comparisons across GPU types are not controlled model-only comparisons.
+
+### Dashboard workflow
+
+The console separates Overview, New experiment, Runs, Campaigns and Models. New experiment
+supports reviewed profiles, metadata inspection of supported Hugging Face repositories and
+existing Plan JSON. Guided load/serving controls and an advanced JSON editor feed the same
+preflight validator as the CLI. Changing guided controls resets advanced edits. Configuration
+and preflight downloads do not start compute; workload preparation, approval and execution
+remain explicit CLI actions. Pricing assumptions must be reviewed before approval.
+
+Runs has Results, Compare, Lifecycle, Quality and Evidence tabs. Full JSON downloads use the
+same portable bundle as CLI exports: run configuration, provenance, telemetry, requests,
+events, summary and smoke checks. Historical missing provenance remains visibly missing.
+“Smoke validated” requires verified remote identity, a completed benchmark, at least ten
+planned requests with every request successful, an intact matching workload manifest,
+conformant controlled lengths when applicable and verified cleanup. It is not a capacity
+or model-quality qualification. Brand assets identify model source, publisher and compute;
+they do not imply endorsement or additional cloud integrations.
