@@ -53,3 +53,30 @@ def test_dashboard_navigation_and_invalid_preflight(tmp_path, monkeypatch):
     assert app.error
     assert not app.get('download_button')
     assert not app.exception
+
+
+def test_json_autofill_preserves_edits_and_rejects_broken_json(tmp_path, monkeypatch):
+    from streamlit.testing.v1 import AppTest
+    monkeypatch.setenv('LAB_DATA', str(tmp_path))
+    app = AppTest.from_file('src/inference_lab/dashboard.py', default_timeout=30).run()
+    app.sidebar.radio[0].set_value('New experiment').run()
+    draft = json.loads(app.text_area[0].value)
+    draft['hypothesis'] = 'Preserve my experiment question'
+    draft['seed'] = 123
+    app.text_area[0].set_value(json.dumps(draft)).run()
+    next(w for w in app.number_input if w.label == 'Requests').set_value(80).run()
+    assert json.loads(app.text_area[0].value)['requests'] == 60
+    next(w for w in app.button if w.label == 'Apply settings to JSON').click().run()
+    updated = json.loads(app.text_area[0].value)
+    assert updated['requests'] == 80
+    assert updated['hypothesis'] == draft['hypothesis'] and updated['seed'] == 123
+    next(w for w in app.button if w.label == 'Autofill load test').click().run()
+    updated = json.loads(app.text_area[0].value)
+    assert updated['requests'] == 300 and updated['seed'] == 123
+    assert not app.error and not app.exception
+    app.text_area[0].set_value('{broken').run()
+    next(w for w in app.button if w.label == 'Autofill smoke test').click().run()
+    assert app.text_area[0].value == '{broken'
+    assert app.error and app.warning
+    assert not app.get('download_button')
+    assert not app.exception

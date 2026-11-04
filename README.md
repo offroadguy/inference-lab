@@ -131,7 +131,10 @@ The implementation was authored with OpenAI Codex assistance for Venkata Ganji. 
 The console separates Overview, New experiment, Runs, Campaigns and Models. New experiment
 supports reviewed profiles, metadata inspection of supported Hugging Face repositories and
 existing Plan JSON. Guided load/serving controls and an advanced JSON editor feed the same
-preflight validator as the CLI. Changing guided controls resets advanced edits. Configuration
+preflight validator as the CLI. JSON is the source of truth: smoke/load templates and the
+Apply settings button merge only their listed fields, preserving other manual edits. The editor
+shows syntax locations and a diff from the starting profile. Changing form values alone does
+not alter the JSON. Download your configuration to retain it outside the browser session. Configuration
 and preflight downloads do not start compute; workload preparation, approval and execution
 remain explicit CLI actions. Pricing assumptions must be reviewed before approval.
 

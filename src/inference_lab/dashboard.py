@@ -162,6 +162,26 @@ def workspace_overview(runs, requests):
     if not runs:
         st.info("Start with the free simulated demo, or open New experiment to prepare a model configuration.")
         st.code("uv run python -m inference_lab.demo", language="bash")
+    st.subheader('Results at a glance')
+    latest = {}
+    for item in remote:
+        latest.setdefault((item['plan']['model'], item['plan']['gpu'], item['plan']['gpu_count']), item)
+    quick = []
+    for item in latest.values():
+        result = summarize(item, requests[item['id']])
+        quick.append({'Model': item['plan']['model'].split('/')[-1],
+                      'GPU': f"{item['plan']['gpu_count']} × {item['plan']['gpu']}",
+                      'Status': item['status'],
+                      'Success / planned': f"{result['successful']} / {item['plan']['requests']}",
+                      'p95 latency': ms(result['latency_p95_s']),
+                      'Output tok/s': number(result['output_tokens_s']),
+                      'Evidence': 'Smoke passed' if verified(item, requests) else 'Not validated',
+                      'Run': item['id']})
+    if quick:
+        st.dataframe(pd.DataFrame(quick), hide_index=True, width='stretch')
+        st.caption('Latest record per model/hardware, including failed or planned runs. Different loads are not a model ranking. Open Runs for exact configuration and evidence.')
+    else:
+        st.caption('No remote results yet. The free demo is available under Runs → Simulated.')
     entries = registry(runs, requests)
     cards = []
     for entry in entries:
@@ -272,26 +292,69 @@ def experiment_planner():
         st.success('Metadata checked; GPU execution remains unvalidated.')
     defaults = Plan(**{**dict(provider='modal', workload='tokens', requests=60, rate=1.0,
                              input_lengths=(128,), output_lengths=(32,), max_spend_usd=10), **cfg}).to_dict()
-    st.subheader('Load and serving controls')
-    context_key = mode + str(cfg.get('model')) + str(cfg.get('gpu'))
-    a, b = st.columns(2)
-    defaults['requests'] = a.number_input('Requests', 1, 10000, defaults['requests'], key=context_key+'requests')
-    defaults['rate'] = b.number_input('Offered requests / second', min_value=0.01, value=float(defaults['rate']), key=context_key+'rate')
-    defaults['concurrency'] = a.number_input('Client concurrency', 1, 32, defaults['concurrency'], key=context_key+'concurrency')
-    defaults['max_model_len'] = b.number_input('Context tokens', 512, 32768, defaults['max_model_len'], key=context_key+'context')
-    defaults['server_max_sequences'] = a.number_input('Server sequence cap', 1, 32, defaults['server_max_sequences'], key=context_key+'sequences')
-    defaults['max_spend_usd'] = b.number_input('Spending allowance · USD', min_value=0.01, value=float(defaults['max_spend_usd']), key=context_key+'spend')
-    defaults['prefix_caching'] = a.checkbox('Prefix caching', defaults['prefix_caching'], key=context_key+'cache')
-    defaults['enforce_eager'] = b.checkbox('Eager execution', defaults['enforce_eager'], key=context_key+'eager')
-    # Advanced edits are scoped to the current guided configuration.
+    defaults = json.loads(json.dumps(defaults))
     from inference_lab.datasets import digest
+    editor_key = 'config_editor_' + digest(defaults)
+    if editor_key not in st.session_state:
+        st.session_state[editor_key] = json.dumps(defaults, indent=2)
+    st.subheader('JSON configuration editor')
+    st.caption('JSON is the source of truth. Autofill only changes the fields listed below; other edits are preserved. Commit text edits with Ctrl+Enter (⌘+Enter on Mac).')
 
-    editor_key = 'planner_' + mode + '_' + str(cfg.get('model')) + '_' + str(cfg.get('gpu')) + '_' + str(cfg.get('revision')) + digest(defaults)
-    st.subheader('Experiment configuration')
-    st.caption('Edit load, context, batching, dtype, cache policy, SLOs and lifetime below. Pricing is a dated assumption: verify it before approving paid execution.')
-    with st.expander('Advanced configuration · JSON'):
-        st.caption('Changing guided controls resets advanced edits to the new configuration.')
-        draft = st.text_area('Complete configuration · JSON', json.dumps(defaults, indent=2), height=330, key=editor_key)
+    def apply_fields(patch):
+        try:
+            current = json.loads(st.session_state[editor_key])
+            if not isinstance(current, dict):
+                raise ValueError()
+            current.update(patch)
+            st.session_state[editor_key] = json.dumps(current, indent=2)
+        except ValueError:
+            st.session_state['editor_notice'] = 'Fix JSON syntax before applying autofill. Your draft was preserved.'
+
+    smoke = dict(workload='tokens', requests=60, rate=1.0, concurrency=2,
+                 input_lengths=[128], output_lengths=[32], arrival='regular',
+                 benchmark_s=180, loading_s=420, warmup_s=120, idle_s=30,
+                 runtime_s=900, reference_s=0)
+    load = {**smoke, 'requests': 300, 'benchmark_s': 360, 'runtime_s': 1080,
+            'arrival': 'poisson'}
+    a, b, c = st.columns(3)
+    a.button('Autofill smoke test', on_click=apply_fields, args=(smoke,))
+    b.button('Autofill load test', on_click=apply_fields, args=(load,))
+    c.button('Format JSON', on_click=apply_fields, args=({},))
+    st.caption('Templates replace workload, request count/rate, concurrency, token lengths, arrival pattern and stage lifetimes. Load-test evidence still needs repetitions and capacity checks. Neither template changes model, hardware, prices or spending allowance.')
+    if 'editor_notice' in st.session_state:
+        st.warning(st.session_state.pop('editor_notice'))
+    with st.expander('Autofill individual settings'):
+        st.caption('These form values are suggestions until you click Apply settings. Only these displayed fields are replaced.')
+        a, b = st.columns(2)
+        patch = {}
+        patch['requests'] = a.number_input('Requests', 1, 10000, defaults['requests'])
+        patch['rate'] = b.number_input('Offered requests / second', min_value=0.01, value=float(defaults['rate']))
+        patch['concurrency'] = a.number_input('Client concurrency', 1, 32, defaults['concurrency'])
+        patch['max_model_len'] = b.number_input('Context tokens', 512, 32768, defaults['max_model_len'])
+        patch['server_max_sequences'] = a.number_input('Server sequence cap', 1, 32, defaults['server_max_sequences'])
+        patch['max_spend_usd'] = b.number_input('Spending allowance · USD', min_value=0.01, value=float(defaults['max_spend_usd']))
+        patch['input_lengths'] = [a.number_input('Input tokens · single length', 1, 32768, int(defaults['input_lengths'][0]))]
+        patch['output_lengths'] = [b.number_input('Output tokens · single length', 1, 1024, int(defaults['output_lengths'][0]))]
+        patch['dtype'] = a.selectbox('Precision', ['half', 'bfloat16'], index=['half','bfloat16'].index(defaults['dtype']))
+        patch['arrival'] = b.selectbox('Arrival pattern', ['regular', 'poisson'], index=['regular','poisson'].index(defaults['arrival']))
+        patch['gpu_memory_utilization'] = a.slider('GPU memory fraction', .5, .9, float(defaults['gpu_memory_utilization']), .01)
+        patch['prefix_caching'] = b.checkbox('Prefix caching', defaults['prefix_caching'])
+        patch['enforce_eager'] = a.checkbox('Eager execution', defaults['enforce_eager'])
+        st.button('Apply settings to JSON', on_click=apply_fields, args=(patch,))
+    draft = st.text_area('Complete configuration · JSON', height=430, key=editor_key)
+    try:
+        current = json.loads(draft)
+        if isinstance(current, dict):
+            changes = [{'Setting': k, 'Profile default': str(defaults.get(k)), 'Draft': str(v)}
+                       for k, v in current.items() if v != defaults.get(k)]
+            with st.expander(f'Changes from selected profile · {len(changes)}'):
+                if changes:
+                    st.dataframe(pd.DataFrame(changes), hide_index=True, width='stretch')
+                else:
+                    st.caption('No changes from the starting configuration.')
+    except json.JSONDecodeError as exc:
+        st.error(f'JSON syntax error at line {exc.lineno}, column {exc.colno}: {exc.msg}')
+        return
     st.subheader('Preflight review')
     try:
         plan = Plan(**json.loads(draft))
@@ -401,6 +464,12 @@ def render():
     else:
         st.caption("Client measurements from a remote run. Billing and unexposed device metrics remain unverified.")
 
+    if all(smoke_checks(run, rows).values()):
+        st.success('Smoke test passed · capacity and quality require separate evidence')
+    elif run['status'] == 'planned':
+        st.info('Configuration prepared · no measured results yet')
+    else:
+        st.warning('This run does not satisfy all smoke checks. See Evidence for the missing checks.')
     cols = st.columns(4)
     cols[0].metric("COMPLETED / OFFERED", f"{summary['successful']} / {summary['offered']}",
                    help="Successful steady-state requests / offered requests, including client rejections.")
