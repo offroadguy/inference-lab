@@ -16,60 +16,65 @@ from inference_lab.models import PROFILES
 from inference_lab.reference import crosscheck
 from inference_lab.store import read_snapshot
 
-st.set_page_config(page_title="Inference Lab · Engineering Observatory", page_icon="◈", layout="wide")
+st.set_page_config(page_title="Inference Lab · Benchmark Console", page_icon="◈", layout="wide")
 st.html("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
-:root {color-scheme:dark;}
-.stApp {background:#0b1018;color:#e8edf5;font-family:'DM Sans',sans-serif;}
-header[data-testid="stHeader"] {background:#0b1018dd;}
-.block-container {padding-top:4rem;max-width:1500px;padding-bottom:3rem;}
-h1,h2,h3 {font-family:'Space Grotesk',sans-serif!important;letter-spacing:-.035em;}
-h1 {font-size:2.6rem!important;line-height:1.15!important;font-weight:600!important;}
-h3 {font-size:1.15rem!important;}
-[data-testid="stSidebar"] {background:#0f1621;border-right:1px solid #253042;}
-[data-testid="stSidebar"] .block-container {padding-top:2rem;}
-[data-testid="stMetric"] {background:#121c29;border:1px solid #29374b;border-radius:14px;padding:20px 22px;min-height:128px;}
-[data-testid="stMetricLabel"] {color:#a6b5ca;font-size:.83rem;}
-[data-testid="stMetricValue"] {font-family:'Space Grotesk',sans-serif;font-size:2rem;color:#f3f6fc;}
-[data-testid="stCaptionContainer"] {color:#a0afc4;}
-[data-baseweb="select"]>div {background:#152131;color:#e8edf5;border-color:#33455c;}
-button[data-baseweb="tab"] {color:#aab8ca;padding:12px 18px;font-size:.9rem;}
-button[data-baseweb="tab"][aria-selected="true"] {color:#62e0c2;}
-[data-baseweb="tab-highlight"] {background:#62e0c2;}
-[data-baseweb="tab-border"] {background:#263347;}
-[data-testid="stExpander"] {background:#101a27;border-color:#29374b;border-radius:12px;}
-[data-testid="stDownloadButton"] button {background:#152b30;color:#9cf0dc;border:1px solid #2c615b;border-radius:9px;}
-[data-testid="stAlert"] {background:#182431;border:1px solid #344e65;color:#e0ebf8;}
-.brand {font-family:'Space Grotesk',sans-serif;font-size:1.25rem;font-weight:600;letter-spacing:-.04em;margin:8px 0 5px;}
-.brand span {color:#63dfc0;font-size:1.55rem;margin-right:10px;}
-.overline {color:#63dfc0;font-size:.68rem;font-weight:700;letter-spacing:.18em;text-transform:uppercase;margin-bottom:14px;}
-.subtitle {color:#9eafc5;font-size:1rem;max-width:740px;line-height:1.65;margin:0 0 24px;}
-.pill {display:inline-block;font-size:.68rem;letter-spacing:.07em;font-weight:600;border:1px solid #3c5364;
- border-radius:6px;padding:5px 9px;color:#b9ccdc;background:#152331;margin:0 6px 7px 0;}
-.pill.green {border-color:#2a6758;color:#83e8cc;background:#102e29;}
-.pill.amber {border-color:#705c36;color:#efce87;background:#2a241a;}
-.note {background:linear-gradient(110deg,#172536,#101b28);border:1px solid #30465e;border-left:3px solid #69b5f8;
- border-radius:10px;padding:16px 20px;font-size:.86rem;color:#bdccdf;line-height:1.6;margin:14px 0 22px;}
-.panel {border:1px solid #2c3a4e;background:#111b28;border-radius:13px;padding:22px;margin-bottom:16px;min-height:130px;}
-.panel h4 {font-family:'Space Grotesk',sans-serif;font-size:1.05rem;color:#ecf3fc;margin:0 0 9px;}
-.panel p {font-size:.85rem;color:#aabbd0;line-height:1.65;margin:0;}
-.step {display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #263449;padding:15px 0;font-size:.87rem;}
-.step span {color:#93a6bd;}.step b {color:#9fe6d2;font-weight:500;}
+:root {color-scheme:light;}
+.stApp {background:#f5f6f8;color:#192330;font-family:Arial,sans-serif;}
+header[data-testid="stHeader"] {background:#f5f6f8ee;}
+.block-container {padding-top:4rem;max-width:1560px;padding-bottom:2rem;}
+h1,h2,h3 {color:#192330;letter-spacing:-.035em;}
+h1 {font-size:1.75rem!important;line-height:1.2!important;font-weight:700!important;}
+h3 {font-size:1rem!important;}
+[data-testid="stSidebar"] {background:#eef0f4;border-right:1px solid #d7dce5;}
+[data-testid="stSidebar"] .block-container {padding-top:1.5rem;}
+[data-testid="stVerticalBlock"] {gap:.75rem;}
+[data-testid="stMetric"] {background:#fff;border:1px solid #d9dfe8;border-top:3px solid #0d9488;border-radius:6px;padding:12px 16px;min-height:94px;}
+[data-testid="stColumn"]:nth-child(2) [data-testid="stMetric"] {border-top-color:#7c3aed;}
+[data-testid="stColumn"]:nth-child(3) [data-testid="stMetric"] {border-top-color:#2563eb;}
+[data-testid="stColumn"]:nth-child(4) [data-testid="stMetric"] {border-top-color:#7c3aed;}
+[data-testid="stMetricLabel"] {color:#556174;font-size:.72rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;}
+[data-testid="stMetricValue"] {font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:1.65rem;color:#182537;}
+[data-testid="stCaptionContainer"] {color:#5b687a;}
+[data-baseweb="select"]>div {background:#fff;color:#192330;border-color:#cbd3df;border-radius:5px;}
+button[data-baseweb="tab"] {color:#526075;padding:10px 12px;font:12px ui-monospace,SFMono-Regular,Menlo,monospace;}
+button[data-baseweb="tab"][aria-selected="true"] {color:#1d4ed8;background:#e8efff;border-radius:5px 5px 0 0;}
+[data-baseweb="tab-highlight"] {background:#2563eb;}
+[data-baseweb="tab-border"] {background:#d7dce5;}
+[data-testid="stExpander"] {background:#fff;border-color:#d9dfe8;border-radius:6px;}
+[data-testid="stDownloadButton"] button {background:#fff;color:#1d4ed8;border:1px solid #c3d2f3;border-radius:5px;}
+.brand {font:700 1.05rem ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:-.05em;margin:4px 0 7px;color:#17243b;}
+.brand span {color:#2563eb;margin-right:8px;}
+.overline {color:#526075;font:11px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em;margin-bottom:8px;}
+.subtitle {color:#647084;font-size:.85rem;line-height:1.5;margin:0 0 12px;}
+.pill {display:inline-block;font:10px ui-monospace,SFMono-Regular,Menlo,monospace;border:1px solid #d4dce8;
+ border-radius:4px;padding:4px 7px;color:#526075;background:#fff;margin:0 5px 3px 0;}
+.pill.green {border-color:#a0d9c8;color:#07644d;background:#e8f7f1;}
+.pill.amber {border-color:#ebcb8c;color:#85520b;background:#fff7e6;}
+.note {background:#fff8e9;border:1px solid #eddbb3;border-left:3px solid #d97706;
+ border-radius:5px;padding:9px 12px;font-size:.78rem;color:#75501a;line-height:1.5;margin:8px 0 12px;}
+.panel {border:1px solid #d9dfe8;background:#fff;border-radius:6px;padding:16px;margin-bottom:12px;min-height:100px;}
+.panel h4 {font-size:.9rem;color:#24324a;margin:0 0 7px;}
+.panel p {font-size:.8rem;color:#5b687a;line-height:1.6;margin:0;}
+.step {display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #d9dfe8;padding:12px 0;font-size:.8rem;gap:12px;}
+.step span {color:#526075;}.step b {color:#087961;font-weight:500;}
+.console-status {display:flex;gap:16px;flex-wrap:wrap;font:11px ui-monospace,SFMono-Regular,Menlo,monospace;color:#526075;border-bottom:1px solid #d7dce5;padding:0 0 10px;margin-bottom:12px;}
+.console-status b {color:#2563eb;font-weight:600;}
+.key {font:11px ui-monospace,SFMono-Regular,Menlo,monospace;line-height:2.3;color:#526075;}
+.key span {display:inline-block;width:7px;height:7px;margin-right:8px;border-radius:2px;}
+.footer {border-top:1px solid #d7dce5;padding-top:12px;margin-top:20px;color:#647084;font:10px ui-monospace,SFMono-Regular,Menlo,monospace;line-height:1.7;}
 @media (max-width:1100px) {
  [data-testid="stHorizontalBlock"] {flex-wrap:wrap;}
  [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {flex:1 1 calc(50% - 1rem)!important;min-width:210px;}
- .block-container {padding-left:1.5rem;padding-right:1.5rem;}
+ .block-container {padding-left:1.25rem;padding-right:1.25rem;}
 }
 @media (max-width:600px) {
  [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {flex-basis:100%!important;}
- h1 {font-size:2rem!important;}
 }
-.footer {border-top:1px solid #253247;padding-top:18px;margin-top:28px;color:#8597af;font-size:.74rem;line-height:1.7;}
 </style>
 """)
 
-COLORS = {"success": "#61dfbe", "rejected": "#edbd70", "error": "#f08391", "incomplete": "#9c9beb"}
+COLORS = {"success": "#0d9488", "rejected": "#d97706", "error": "#e11d48", "incomplete": "#7c3aed"}
 
 
 def label(run):
@@ -86,11 +91,11 @@ def label(run):
 
 
 def chart(fig, height=300):
-    fig.update_layout(template="plotly_dark", height=height, paper_bgcolor="#111b28", plot_bgcolor="#111b28",
-                      margin=dict(l=20, r=20, t=25, b=35), font=dict(family="DM Sans, sans-serif", color="#aabbd0"),
-                      legend=dict(orientation="h", y=1.15), hoverlabel=dict(bgcolor="#24364c"))
-    fig.update_xaxes(gridcolor="#243144", zeroline=False)
-    fig.update_yaxes(gridcolor="#243144", zeroline=False)
+    fig.update_layout(template="plotly_white", height=height, paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
+                      margin=dict(l=20, r=20, t=25, b=35), font=dict(family="Menlo, monospace", size=11, color="#526075"),
+                      legend=dict(orientation="h", y=1.15), hoverlabel=dict(bgcolor="#ffffff", font_color="#192330"))
+    fig.update_xaxes(gridcolor="#e9edf3", zeroline=False)
+    fig.update_yaxes(gridcolor="#e9edf3", zeroline=False)
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
 
@@ -107,15 +112,19 @@ def panel(title, text):
 
 
 with st.sidebar:
-    st.html('<div class="brand"><span>◈</span> INFERENCE LAB</div><div class="overline">Engineering observatory</div>')
+    st.html('<div class="brand"><span>&gt;_</span> inference.lab</div><div class="overline">BENCHMARK CONSOLE / v0.2</div>')
     st.caption("Venkata Ganji · Independent portfolio")
     st.divider()
-    st.markdown("**Experiment workspace**")
+    st.markdown("**Workspace**")
     source = st.selectbox("Evidence source", ["All runs", "Simulated", "Modal"])
     st.caption("Simulation validates the harness. Remote runs establish inference evidence.")
     st.divider()
-    st.markdown("**Built for explainability**")
-    st.caption("01 / Explicit spending approval\n\n02 / Durable request evidence\n\n03 / Bounded resource lifetime\n\n04 / Verifiable cleanup")
+    st.markdown("**Signal legend**")
+    st.html('<div class="key"><span style="background:#2563eb"></span>Requests / throughput<br>'
+            '<span style="background:#7c3aed"></span>Latency / timing<br>'
+            '<span style="background:#0d9488"></span>Success / verified<br>'
+            '<span style="background:#d97706"></span>Simulation / pending<br>'
+            '<span style="background:#e11d48"></span>Errors / failures</div>')
     st.divider()
     st.link_button("View source ↗", "https://github.com/offroadguy/inference-lab", width="stretch")
     st.caption("Python · vLLM · Modal\n\nSQLite · Streamlit · Plotly")
@@ -126,10 +135,11 @@ def render():
     runs, requests = read_snapshot()
     if source != "All runs":
         runs = [r for r in runs if r["plan"]["provider"] == source.lower()]
-    st.html('<div class="overline">Measure / Understand / Improve</div>')
-    st.title("Inference, made observable.")
-    st.html('<p class="subtitle">From the first streamed response to the last resource shutdown. '
-            'An engineering notebook for performance, capacity, and recovery.</p>')
+    st.html('<div class="console-status"><span><b>LAB</b> / inference</span>'
+            '<span>READ ONLY</span><span>REFRESH / 5s</span>'
+            f'<span>RUNS / {len(runs):02d}</span></div>')
+    st.title("Inference benchmark console")
+    st.html('<p class="subtitle">Latency, throughput, quality, cost. Every number backed by a run.</p>')
     if not runs:
         st.info("No experiments in this view yet. Create a plan in the CLI or select another evidence source.")
         st.code("uv run python -m inference_lab.demo", language="bash")
@@ -151,21 +161,20 @@ def render():
             f'<span class="pill">{escape(observed)}</span>')
     if simulated:
         st.html('<div class="note"><strong>Software demonstration · no GPU was used.</strong> '
-                'These are real observations of a synthetic streaming fixture. They demonstrate measurement, '
-                'admission control, and recovery—not model speed, GPU capacity, or cost savings.</div>')
+                'Fixture timings validate the harness only; model performance and GPU capacity remain unverified.</div>')
     else:
         st.caption("Client measurements from a remote run. Billing and unexposed device metrics remain unverified.")
 
     cols = st.columns(4)
-    cols[0].metric("REQUESTS COMPLETED", f"{summary['successful']} / {summary['offered']}",
+    cols[0].metric("COMPLETED / OFFERED", f"{summary['successful']} / {summary['offered']}",
                    help="Successful steady-state requests / offered requests, including client rejections.")
-    cols[1].metric("P95 RESPONSE LATENCY", ms(summary["latency_p95_s"]), help="Successful requests only.")
-    cols[2].metric("ACHIEVED THROUGHPUT", number(summary["successful_rps"], " req/s"))
-    cols[3].metric("P95 FIRST RESPONSE", ms(summary["ttft_p95_s"]), help="First nonempty content chunk, not server TTFT.")
+    cols[1].metric("LATENCY / P95", ms(summary["latency_p95_s"]), help="Successful requests only.")
+    cols[2].metric("THROUGHPUT / REQ·S⁻¹", number(summary["successful_rps"], " req/s"))
+    cols[3].metric("FIRST CONTENT / P95", ms(summary["ttft_p95_s"]), help="First nonempty content chunk, not server TTFT.")
     st.write("")
     overview, comparison, reliability, quality, models, campaigns, evidence = st.tabs(
-        ["Performance", "Compare experiments", "Reliability & cost", "Quality & validation",
-         "Models & readiness", "Campaigns", "Evidence & methodology"])
+        ["01 Performance", "02 Compare", "03 Reliability", "04 Quality",
+         "05 Models", "06 Campaigns", "07 Evidence"])
 
     with overview:
         left, right = st.columns([1.65, 1])
@@ -175,9 +184,9 @@ def render():
             st.caption(f"{len(successes)} successful samples · milliseconds · client end-to-end")
             if successes:
                 latencies = [r["latency_s"] * 1000 for r in successes]
-                fig = go.Figure(go.Histogram(x=latencies, nbinsx=14, marker_color="#60dcbf", opacity=.85))
-                fig.add_vline(x=summary["latency_p95_s"] * 1000, line_dash="dot", line_color="#b6a4ff",
-                              annotation_text="p95", annotation_font_color="#d4c9ff")
+                fig = go.Figure(go.Histogram(x=latencies, nbinsx=14, marker_color="#7c3aed", opacity=.75))
+                fig.add_vline(x=summary["latency_p95_s"] * 1000, line_dash="dot", line_color="#d97706",
+                              annotation_text="p95", annotation_font_color="#a65e08")
                 fig.update_layout(xaxis_title="Response latency (ms)", yaxis_title="Requests", bargap=.12)
                 chart(fig)
             else:
@@ -211,13 +220,13 @@ def render():
                     st.markdown(f"- {reason}")
             else:
                 st.success("This run meets the evidence checks. Use at least three repetitions for a campaign operating point.")
-        st.subheader("The experiment")
+        st.subheader("Run configuration")
         a, b, c = st.columns(3)
         with a:
             panel("Hypothesis", p["hypothesis"])
         with b:
             panel("Load envelope", f"{p['rate']:g} requests/sec · {p['concurrency']} concurrent · "
-                  f"{p['max_tokens']} maximum output tokens. Regular arrivals with bounded admission.")
+                  f"{p['max_tokens']} maximum output tokens. {p.get('arrival', 'regular').title()} arrivals with bounded admission.")
         with c:
             outcome = "Within configured targets" if summary["within_targets"] else "Targets not demonstrated"
             panel(outcome, f"p95 target ≤ {p['target_p95_s']:g}s; error/rejection target ≤ "
@@ -226,8 +235,8 @@ def render():
             st.subheader("Response timeline")
             base = min(r["started_at"] for r in successes)
             fig = go.Figure()
-            for field, name, color in [("latency_s", "End-to-end", "#62dfc1"),
-                                       ("ttft_s", "First content", "#9c9bef")]:
+            for field, name, color in [("latency_s", "End-to-end", "#2563eb"),
+                                       ("ttft_s", "First content", "#7c3aed")]:
                 valid = [r for r in successes if r.get(field) is not None]
                 fig.add_trace(go.Scatter(x=[r["started_at"] - base for r in valid],
                                         y=[r[field] * 1000 for r in valid], mode="lines+markers",
@@ -236,7 +245,7 @@ def render():
             chart(fig, 270)
 
     with comparison:
-        st.subheader("One change. Inspect the tradeoff.")
+        st.subheader("Experiment comparison")
         st.caption("Compare exact configurations before attributing an improvement.")
         candidates = [r for r in runs if r["id"] != chosen]
         if not candidates:
@@ -262,14 +271,14 @@ def render():
                 st.subheader("Successful throughput")
                 fig = go.Figure(go.Bar(x=["Baseline", "Selected"],
                                       y=[baseline_summary["successful_rps"], summary["successful_rps"]],
-                                      marker_color=["#8294b5", "#61dfbe"]))
+                                      marker_color=["#94a3b8", "#0d9488"]))
                 fig.update_layout(yaxis_title="Successful requests / second")
                 chart(fig)
             with b:
                 st.subheader("Tail latency")
                 fig = go.Figure(go.Bar(x=["Baseline", "Selected"],
                                       y=[s["latency_p95_s"] * 1000 if s["latency_p95_s"] is not None else None
-                                         for s in [baseline_summary, summary]], marker_color=["#8294b5", "#b5a5fb"]))
+                                         for s in [baseline_summary, summary]], marker_color=["#94a3b8", "#7c3aed"]))
                 fig.update_layout(yaxis_title="p95 response latency (ms)")
                 chart(fig)
             st.caption("No automatic causal or significance claim. Synthetic throughput cannot size GPU infrastructure.")
@@ -284,7 +293,7 @@ def render():
         st.dataframe(pd.DataFrame(inventory), hide_index=True, width="stretch")
         st.subheader("Offered load vs. achieved throughput")
         fig = go.Figure()
-        for provider, color in [("simulated", "#edbd70"), ("modal", "#61dfbe")]:
+        for provider, color in [("simulated", "#d97706"), ("modal", "#0d9488")]:
             group = [item for item in inventory if item["Evidence"] == provider]
             if group:
                 fig.add_trace(go.Scatter(x=[item["Offered rate (req/s)"] for item in group],
@@ -315,7 +324,7 @@ def render():
                                if r["status"] in {"error", "rejected", "incomplete"})
             if failures:
                 fig = go.Figure(go.Bar(x=list(failures.values()), y=list(failures.keys()), orientation="h",
-                                      marker_color="#efbd76"))
+                                      marker_color="#e11d48"))
                 fig.update_layout(xaxis_title="Requests", yaxis_title=None)
                 chart(fig, 260)
             else:
@@ -350,7 +359,7 @@ def render():
                   "GPU utilization and allocated memory are not inferred from client timing.")
 
     with quality:
-        st.subheader("Quality is a separate axis.")
+        st.subheader("Quality evaluation")
         st.caption("Versioned task scoring accompanies performance. Synthetic fixture outputs are not model-quality evidence.")
         a, b, c = st.columns(3)
         a.metric("UNIQUE COMPLETED CASES", str(summary["quality_unique_cases"]))
@@ -385,7 +394,7 @@ def render():
             st.caption(server.get("scope", ""))
 
     with models:
-        st.subheader("Four checkpoints. Explicit evidence levels.")
+        st.subheader("Model registry")
         st.caption("Qwen2.5 0.5B / 3B / 7B / 32B. All below 100B; this is not a claim to support every model under 100B.")
         inventory = []
         for key, profile in PROFILES.items():
@@ -429,7 +438,7 @@ def render():
                   "A capacity point needs three qualifying remote repetitions; synthetic runs remain demonstrations.")
 
     with evidence:
-        st.subheader("Trace every claim to a request.")
+        st.subheader("Request journal")
         st.caption(f"Run {chosen} · raw records include warm-up, errors and incomplete responses.")
         fields = ["id", "phase", "status", "error", "prompt_tokens", "output_tokens", "ttft_s", "latency_s"]
         if rows:
@@ -447,8 +456,8 @@ def render():
         panel("Engineering ownership", "Independent portfolio project by Venkata Ganji, developed with Codex assistance. "
               "Project code owns orchestration, approval, measurements, persistence and recovery. "
               "Modal supplies compute; vLLM supplies inference; Qwen supplies the model.")
-    st.html('<div class="footer">INFERENCE LAB / LOCAL OBSERVATORY<br>'
-            'Evidence before claims. No spending controls in the dashboard. Refreshes every 5 seconds.</div>')
+    st.html('<div class="footer">inference.lab / local journal<br>'
+            'read-only · refresh 5s · spending approval via CLI</div>')
 
 
 render()
