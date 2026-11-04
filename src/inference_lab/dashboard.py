@@ -14,13 +14,23 @@ from inference_lab.config import Plan
 from inference_lab.report import compare, summarize
 from inference_lab.models import PROFILES
 from inference_lab.reference import crosscheck
-from inference_lab.store import read_snapshot
+from inference_lab.store import read_snapshot, Store
 
 st.set_page_config(page_title="Inference Lab · Benchmark Console", page_icon="◈", layout="wide")
 st.html("""
 <style>
+.readiness {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:12px 0 20px;}
+.readiness .signal {padding:12px 10px;}
+.readiness .signal .value {font-size:13px;line-height:1.45;}
+@media(max-width:600px){.readiness{grid-template-columns:repeat(2,minmax(0,1fr));}}
+.signal {background:white;border:1px solid #e0e5ed;border-radius:8px;padding:16px 18px;border-left:3px solid var(--signal);height:100%;}
+.signal .value {font:600 20px ui-monospace,monospace;color:#17243b;margin:8px 0;}
+.signal .caption {font-size:12px;color:#66758a;line-height:1.5;}
+.signal .name {font:11px ui-monospace,monospace;color:var(--signal);text-transform:uppercase;letter-spacing:.04em;}
+[data-testid="stSidebar"] {min-width:225px!important;max-width:245px!important;}
+
 :root {color-scheme:light;}
-.stApp {background:#f5f6f8;color:#192330;font-family:Arial,sans-serif;}
+.stApp {background:#fafbfc;color:#192330;font-family:Arial,sans-serif;}
 header[data-testid="stHeader"] {background:#f5f6f8ee;}
 .block-container {padding-top:4rem;max-width:1560px;padding-bottom:2rem;}
 h1,h2,h3 {color:#192330;letter-spacing:-.035em;}
@@ -29,10 +39,7 @@ h3 {font-size:1rem!important;}
 [data-testid="stSidebar"] {background:#eef0f4;border-right:1px solid #d7dce5;}
 [data-testid="stSidebar"] .block-container {padding-top:1.5rem;}
 [data-testid="stVerticalBlock"] {gap:.75rem;}
-[data-testid="stMetric"] {background:#fff;border:1px solid #d9dfe8;border-top:3px solid #0d9488;border-radius:6px;padding:12px 16px;min-height:94px;}
-[data-testid="stColumn"]:nth-child(2) [data-testid="stMetric"] {border-top-color:#7c3aed;}
-[data-testid="stColumn"]:nth-child(3) [data-testid="stMetric"] {border-top-color:#2563eb;}
-[data-testid="stColumn"]:nth-child(4) [data-testid="stMetric"] {border-top-color:#7c3aed;}
+[data-testid="stMetric"] {background:#fff;border:1px solid #d9dfe8;border-top:1px solid #d9dfe8;border-radius:6px;padding:12px 16px;min-height:94px;}
 [data-testid="stMetricLabel"] {color:#556174;font-size:.72rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;}
 [data-testid="stMetricValue"] {font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:1.65rem;color:#182537;}
 [data-testid="stCaptionContainer"] {color:#5b687a;}
@@ -79,15 +86,8 @@ COLORS = {"success": "#0d9488", "rejected": "#d97706", "error": "#e11d48", "inco
 
 def label(run):
     p = run["plan"]
-    if p["simulated_fault"] != "none":
-        name = "Controlled failure"
-    elif "recovery" in p["hypothesis"].lower():
-        name = "Recovery validation"
-    elif p["concurrency"] > 1:
-        name = "Concurrency experiment"
-    else:
-        name = "Baseline experiment"
-    return f"{p['model'].split('/')[-1]} · {name} · {p['rate']:g} req/s · {run['id'][:6]}"
+    return f"{p['model'].split('/')[-1]} · {run['status']} · {p['rate']:g} req/s · {run['id'][:6]}"
+
 
 
 def chart(fig, height=300):
@@ -112,34 +112,123 @@ def panel(title, text):
 
 
 with st.sidebar:
-    st.html('<div class="brand"><span>&gt;_</span> inference.lab</div><div class="overline">BENCHMARK CONSOLE / v0.2</div>')
+    st.html('<div class="brand"><span>◈</span> inference.lab</div><div class="overline">ENGINEERING WORKSPACE</div>')
     st.caption("Venkata Ganji · Independent portfolio")
     st.divider()
-    st.markdown("**Workspace**")
-    source = st.selectbox("Evidence source", ["All runs", "Simulated", "Modal"])
-    st.caption("Simulation validates the harness. Remote runs establish inference evidence.")
+    page = st.radio("Workspace", ["Overview", "Experiments", "Models"], label_visibility="collapsed")
     st.divider()
-    st.markdown("**Signal legend**")
-    st.html('<div class="key"><span style="background:#2563eb"></span>Requests / throughput<br>'
-            '<span style="background:#7c3aed"></span>Latency / timing<br>'
-            '<span style="background:#0d9488"></span>Success / verified<br>'
-            '<span style="background:#d97706"></span>Simulation / pending<br>'
-            '<span style="background:#e11d48"></span>Errors / failures</div>')
-    st.divider()
-    st.link_button("View source ↗", "https://github.com/offroadguy/inference-lab", width="stretch")
-    st.caption("Python · vLLM · Modal\n\nSQLite · Streamlit · Plotly")
+    st.caption("EVIDENCE JOURNAL")
+    st.caption("Local records · refresh every 5s\n\nProvider activity is not polled.")
+    st.link_button("Source code ↗", "https://github.com/offroadguy/inference-lab", width="stretch")
+
+
+def signal(name, value, caption, color="#2563eb"):
+    st.html(f'<div class="signal" style="--signal:{color}"><div class="name">{escape(name)}</div>'
+            f'<div class="value">{escape(str(value))}</div><div class="caption">{escape(caption)}</div></div>')
+
+
+def verified(run, requests):
+    return (run["plan"]["provider"] == "modal" and run["status"] == "complete"
+            and run.get("server_identity", {}).get("verified") and run["shutdown"] == "verified"
+            and summarize(run, requests[run["id"]])["successful"] > 0)
+
+
+def registry(runs, requests):
+    entries = []
+    for key, profile in PROFILES.items():
+        matching = [r for r in runs if r["plan"]["model"] == profile.model and r["plan"]["provider"] == "modal"]
+        passed = [r for r in matching if verified(r, requests)]
+        attempted = [r for r in matching if r.get("deploy_intent") or r["status"] != "planned"]
+        entries.append({"Profile": key, "Parameters (B)": profile.parameters_b,
+                        "Hardware": f"{profile.gpu_count} × {profile.gpu}",
+                        "Readiness": "Smoke validated" if passed else "Attempted · not validated" if attempted else "Not launched",
+                        "Validated runs": len(passed)})
+    return entries
+
+
+def workspace_overview(runs, requests):
+    remote = sorted([r for r in runs if r["plan"]["provider"] == "modal"],
+                    key=lambda r: r.get("started_at") or r["created_at"], reverse=True)
+    entries = registry(runs, requests)
+    cards = []
+    for entry in entries:
+        color = "#087f6b" if entry["Validated runs"] else "#a86b16" if "Attempted" in entry["Readiness"] else "#64748b"
+        cards.append(f'<div class="signal" style="--signal:{color}"><div class="name">{escape(entry["Profile"])}</div>'
+                     f'<div class="value">{escape(entry["Readiness"])}</div><div class="caption">{escape(entry["Hardware"])}</div></div>')
+    st.html('<div class="readiness">' + ''.join(cards) + '</div>')
+    completed = [r for r in remote if verified(r, requests)]
+    if completed:
+        run = completed[0]
+        summary = summarize(run, requests[run["id"]])
+        st.subheader("Latest validated smoke test")
+        st.caption(f"{run['plan']['model']} · {run['id']} · recorded cleanup verified")
+        plan = run['plan']
+        observed = datetime.fromtimestamp(run['created_at'], timezone.utc).strftime('%b %d, %Y · %H:%M UTC')
+        st.caption(f"{observed} · {plan['rate']:g} offered req/s · concurrency {plan['concurrency']} · "
+                   f"input lengths {plan['input_lengths']} / output lengths {plan['output_lengths']} tokens")
+        cols = st.columns(4)
+        values = [("Successful requests", f"{summary['successful']} / {summary['offered']}", "Steady-state requests", "#087f6b"),
+                  ("Client latency · p95", ms(summary['latency_p95_s']), "Successful requests only", "#7c3aed"),
+                  ("Output throughput", number(summary['output_tokens_s'], " tok/s"), "Aggregate successful throughput", "#2563eb"),
+                  ("Resource estimate", number(summary['resource_cost_estimate_usd'], " USD"), "Not a reconciled provider bill", "#64748b")]
+        for col, value in zip(cols, values):
+            with col:
+                signal(*value)
+        st.caption("Smoke evidence only. Capacity qualification, repeated load tests and model quality require separate evidence.")
+        left, right = st.columns([1.5, 1])
+        successes = sorted([r for r in requests[run['id']] if r['phase'] == 'steady' and r['status'] == 'success'], key=lambda r:r['started_at'])
+        with left:
+            st.subheader("Client response timing")
+            fig = go.Figure()
+            base = successes[0]['started_at']
+            for field, name, color in [('latency_s', 'End-to-end', '#7c3aed'), ('ttft_s', 'First content', '#2563eb')]:
+                valid = [r for r in successes if r.get(field) is not None]
+                fig.add_trace(go.Scatter(x=[r['started_at']-base for r in valid], y=[r[field]*1000 for r in valid], name=name, mode='lines', line=dict(color=color)))
+            fig.update_layout(xaxis_title='Elapsed time (s)', yaxis_title='Milliseconds')
+            chart(fig, 260)
+        with right:
+            st.subheader("Evidence boundaries")
+            panel("What passed", "Pinned model identity, successful remote requests and recorded resource cleanup.")
+            panel("What remains open", "A short single run cannot establish sustainable capacity, production reliability or model quality. Client first content is distinct from server TTFT.")
+    else:
+        st.info("No validated remote smoke test recorded yet. Explore model readiness and experiment lifecycle evidence below.")
+    st.subheader("Remote experiment journal")
+    st.caption("Historical run state and cleanup records; this is not a live view of Modal containers.")
+    records = []
+    for run in remote:
+        summary = summarize(run, requests[run['id']])
+        records.append({"Run":run['id'], "Model":run['plan']['model'].split('/')[-1],
+                        "Result":run['status'], "Successes":summary['successful'],
+                        "Recorded cleanup":run['shutdown'].replace('_',' '),
+                        "Estimate (USD)":summary['resource_cost_estimate_usd']})
+    if records:
+        st.dataframe(pd.DataFrame(records), hide_index=True, width="stretch")
+    else:
+        st.caption("No remote plans recorded.")
+    st.caption("Open Experiments for deployment events, timing confidence, telemetry and raw exports.")
 
 
 @st.fragment(run_every="5s")
 def render():
     runs, requests = read_snapshot()
+    st.html('<div class="console-status"><span><b>INFERENCE LAB</b> / workspace</span>'
+            '<span>LOCAL JOURNAL</span><span>READ ONLY · 5s REFRESH</span></div>')
+    st.title(page)
+    if page == "Overview":
+        st.caption("Model readiness, recent evidence and the boundaries of what has been measured.")
+        workspace_overview(runs, requests)
+        return
+    if page == "Models":
+        st.caption("Four pinned Qwen2.5 profiles. Configured capability and validated execution are separate states.")
+        st.dataframe(pd.DataFrame(registry(runs, requests)), hide_index=True, width="stretch")
+        panel("Validation scope", "A completed smoke test demonstrates that one configuration served requests. It does not qualify capacity or quality, or validate every model below 100B.")
+        for key, profile in PROFILES.items():
+            with st.expander(f"{key} · configuration and analytical memory budget"):
+                st.json(profile.to_dict())
+        return
+    source = st.selectbox("Evidence source", ["Modal", "Simulated", "All runs"])
     if source != "All runs":
         runs = [r for r in runs if r["plan"]["provider"] == source.lower()]
-    st.html('<div class="console-status"><span><b>LAB</b> / inference</span>'
-            '<span>READ ONLY</span><span>REFRESH / 5s</span>'
-            f'<span>RUNS / {len(runs):02d}</span></div>')
-    st.title("Inference benchmark console")
-    st.html('<p class="subtitle">Latency, throughput, quality, cost. Every number backed by a run.</p>')
     if not runs:
         st.info("No experiments in this view yet. Create a plan in the CLI or select another evidence source.")
         st.code("uv run python -m inference_lab.demo", language="bash")
@@ -172,11 +261,7 @@ def render():
     cols[2].metric("THROUGHPUT / REQ·S⁻¹", number(summary["successful_rps"], " req/s"))
     cols[3].metric("FIRST CONTENT / P95", ms(summary["ttft_p95_s"]), help="First nonempty content chunk, not server TTFT.")
     st.write("")
-    overview, comparison, reliability, quality, models, campaigns, evidence = st.tabs(
-        ["01 Performance", "02 Compare", "03 Reliability", "04 Quality",
-         "05 Models", "06 Campaigns", "07 Evidence"])
-
-    with overview:
+    with st.expander("Performance & measurement confidence", expanded=True):
         left, right = st.columns([1.65, 1])
         successes = [r for r in rows if r["phase"] == "steady" and r["status"] == "success"]
         with left:
@@ -226,7 +311,8 @@ def render():
             panel("Hypothesis", p["hypothesis"])
         with b:
             panel("Load envelope", f"{p['rate']:g} requests/sec · {p['concurrency']} concurrent · "
-                  f"{p['max_tokens']} maximum output tokens. {p.get('arrival', 'regular').title()} arrivals with bounded admission.")
+                  f"Output lengths: {p['output_lengths']} tokens. {p.get('arrival', 'regular').title()} arrivals with bounded admission." if p["workload"] == "tokens" else
+                  f"{p['rate']:g} requests/sec · {p['concurrency']} concurrent · {p['max_tokens']} maximum output tokens.")
         with c:
             outcome = "Within configured targets" if summary["within_targets"] else "Targets not demonstrated"
             panel(outcome, f"p95 target ≤ {p['target_p95_s']:g}s; error/rejection target ≤ "
@@ -244,7 +330,7 @@ def render():
             fig.update_layout(xaxis_title="Seconds since first successful request started", yaxis_title="Latency (ms)")
             chart(fig, 270)
 
-    with comparison:
+    with st.expander("Compare experiments", expanded=False):
         st.subheader("Experiment comparison")
         st.caption("Compare exact configurations before attributing an improvement.")
         candidates = [r for r in runs if r["id"] != chosen]
@@ -305,7 +391,7 @@ def render():
         chart(fig)
         st.caption("Different workloads and concurrency bounds are separate experiments, not a single capacity curve.")
 
-    with reliability:
+    with st.expander("Lifecycle, failures & resource telemetry", expanded=False):
         a, b = st.columns([1, 1.4])
         with a:
             st.subheader("Lifecycle checkpoints")
@@ -328,8 +414,20 @@ def render():
                 fig.update_layout(xaxis_title="Requests", yaxis_title=None)
                 chart(fig, 260)
             else:
-                panel("No recorded failures", "This is an observation of the selected run, not a reliability guarantee.")
+                panel("No request failures recorded", "Deployment may have stopped before requests began. Inspect the lifecycle events below.")
             st.caption("Error codes are evidence, not root cause. A timeout alone cannot prove OOM or exhausted credits.")
+        store = Store()
+        try:
+            events = store.events(chosen)
+        finally:
+            store.db.close()
+        st.subheader("Lifecycle event journal")
+        if events:
+            st.dataframe(pd.DataFrame([{"Time (UTC)": datetime.fromtimestamp(e['ts'], timezone.utc).isoformat(),
+                                       "Event": e['kind'], "Details": json.dumps({k:v for k,v in e.items() if k not in {'ts','kind'}})}
+                                      for e in events]), hide_index=True, width="stretch")
+        else:
+            st.caption("No lifecycle events recorded.")
         st.write("")
         a, b, c = st.columns(3)
         estimate = Plan(**p).estimate()
@@ -344,7 +442,11 @@ def render():
         telemetry_rows = [{"at": datetime.fromtimestamp(t["at"], timezone.utc), **t["values"]}
                           for t in run["telemetry"] if t["values"]]
         if telemetry_rows:
-            st.line_chart(pd.DataFrame(telemetry_rows).set_index("at"))
+            telemetry_frame = pd.DataFrame(telemetry_rows).set_index("at")
+            metric = st.selectbox("Server metric (original units)", list(telemetry_frame.columns))
+            fig = go.Figure(go.Scatter(x=telemetry_frame.index, y=telemetry_frame[metric], mode="lines+markers", name=metric))
+            fig.update_layout(yaxis_title=metric, xaxis_title="Time (UTC)")
+            chart(fig)
         devices = [{"at": datetime.fromtimestamp(t["at"], timezone.utc),
                     "Memory used (GiB)": t["gpu_memory_bytes"] / 2**30,
                     "GPU utilization (%)": t["gpu_utilization"]}
@@ -358,7 +460,7 @@ def render():
             panel("Device telemetry unavailable", "No server queue or KV-cache samples were exposed in this run. "
                   "GPU utilization and allocated memory are not inferred from client timing.")
 
-    with quality:
+    with st.expander("Quality & measurement cross-checks", expanded=False):
         st.subheader("Quality evaluation")
         st.caption("Versioned task scoring accompanies performance. Synthetic fixture outputs are not model-quality evidence.")
         a, b, c = st.columns(3)
@@ -393,34 +495,10 @@ def render():
                          hide_index=True, width="stretch")
             st.caption(server.get("scope", ""))
 
-    with models:
-        st.subheader("Model registry")
-        st.caption("Qwen2.5 0.5B / 3B / 7B / 32B. All below 100B; this is not a claim to support every model under 100B.")
-        inventory = []
-        for key, profile in PROFILES.items():
-            matching = [r for r in runs if r["plan"]["model"] == profile.model]
-            tokenizer_checked = any(r.get("manifest", {}).get("version") == "engineering-passages-v1"
-                                    for r in matching)
-            remote = [r for r in matching if r["plan"]["provider"] == "modal" and r["status"] == "complete"
-                      and r["shutdown"] == "verified" and r.get("server_identity", {}).get("verified")
-                      and summarize(r, requests[r["id"]])["successful"] > 0]
-            inventory.append({"Profile": key, "Parameters (B)": profile.parameters_b,
-                              "Hardware": f"{profile.gpu_count} × {profile.gpu}",
-                              "Pinned tokenizer prepared": tokenizer_checked,
-                              "Verified remote smoke runs": len(remote),
-                              "State": "Remote smoke passed" if remote else "GPU validation pending"})
-        st.dataframe(pd.DataFrame(inventory), hide_index=True, width="stretch")
-        st.caption("Readiness counts reflect the current evidence-source filter. Simulation never validates model execution.")
-        with st.expander("Analytical memory budgets and model revisions"):
-            st.json([profile.to_dict() for profile in PROFILES.values()])
-        panel("What larger-model support means", "Profiles specify pinned weights, FP16 serving, context limits, "
-              "tensor parallelism and resource budgets. The 32B profile uses two 80GB A100s. "
-              "Weights, activations and KV cache must fit together; parameter count alone is not a compatibility test.")
-
-    with campaigns:
+    with st.expander("Repeated load campaigns", expanded=False):
         st.subheader("Repeated load sweeps")
         st.caption("Sequential experiments, aggregate spending approval, durable progress and explicit capacity checks.")
-        campaign_files = sorted(Path(os.getenv("LAB_DATA") or "data").glob("campaign-*-report.json"), reverse=True)
+        campaign_files = sorted(Path(os.getenv("LAB_DATA") or "data").glob("campaign-*-report.json"), key=lambda path: path.stat().st_mtime, reverse=True)
         if campaign_files:
             file = st.selectbox("Campaign report", campaign_files, format_func=lambda path: path.stem)
             try:
@@ -437,7 +515,7 @@ def render():
             panel("No campaign results yet", "Use sweep-plan, sweep-approve and sweep-run in the CLI. "
                   "A capacity point needs three qualifying remote repetitions; synthetic runs remain demonstrations.")
 
-    with evidence:
+    with st.expander("Raw evidence & exports", expanded=False):
         st.subheader("Request journal")
         st.caption(f"Run {chosen} · raw records include warm-up, errors and incomplete responses.")
         fields = ["id", "phase", "status", "error", "prompt_tokens", "output_tokens", "ttft_s", "latency_s"]
